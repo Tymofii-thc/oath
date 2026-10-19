@@ -1,0 +1,15 @@
+# Required: public key(s) of the CI signer (comma-separate for rotation)
+signer: ""
+network: devnet            # devnet | mainnet
+image: ghcr.io/tymofii-thc/oath-webhook:latest
+mode: enforce              # enforce | audit
+failurePolicy: Fail        # Fail | Ignore
+quorum: 1
+attestRepo: ""             # owner/repo, empty = not required
+staleOkHours: 1            # RPC outage: admit digests verified in the last N hours (0 = strict)
+replicas: 2
+# Private registries, e.g. '{"ghcr.io":{"username":"u","password":"token"}}'. Or reference an existing Secret (key "auth").
+registryAuth: ""
+registryAuthSecret: ""
+# Periodic audit of already-running Pods, cron expression, empty = off
+auditSchedule: ""

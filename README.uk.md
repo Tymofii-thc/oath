@@ -28,7 +28,7 @@ deploy ──► docker pull ──► oath verify ──► ✔ exit 0  → д�
 ```bash
 npx --yes --allow-git=all github:Tymofii-thc/oath init      # або: node bin/oath.mjs init  у клоні
 ```
-`oath init` створює ключ у `.oath/ci-key.json` (секрет не друкується, а `.oath/` потрапляє в `.gitignore`), просить у devnet-faucet SOL, а якщо публічний faucet відмовив (так буває часто), друкує посилання і **чекає, поки ти поповниш ключ**. Потім друкує, що саме додати в репозиторій: секрет `SOLANA_SECRET_KEY`, змінну `OATH_SIGNER` і два кроки workflow нижче. Якщо встановлено GitHub CLI і ти залогінений, `oath init --set-github` додасть секрет і змінну сам (перевірено на підставному `gh`, з реальним поки не пробували).
+`oath init` створює ключ у `.oath/ci-key.json` (секрет не друкується, а `.oath/` потрапляє в `.gitignore`), просить у devnet-faucet SOL, а якщо публічний faucet відмовив (так буває часто), друкує посилання і **чекає, поки ти поповниш ключ**. Потім друкує, що саме додати в репозиторій: секрет `SOLANA_SECRET_KEY`, змінну `OATH_SIGNER` і два кроки workflow нижче. Якщо встановлено GitHub CLI і ти залогінений, `oath init --set-github` додасть секрет і змінну сам (перевірено зі справжнім `gh` на тимчасовому приватному репозиторії).
 
 **2. Запис після збірки** (у вашому workflow):
 ```yaml
@@ -70,6 +70,7 @@ kubectl run t --image=nginx        # → denied: no pipeline build anchored by t
 - Для кожного нового Pod бере всі образи (`initContainers`, `containers`, `ephemeralContainers`), резолвить тег у digest через реєстр і шукає запис у Solana. Нема запису → Pod не створюється (в тому числі зі створених Deployment/Job).
 - **Підмінює тег на перевірений digest** (`app:latest` → `app@sha256:…`), тож кубелет витягне саме те, що перевірено; тег між перевіркою і pull змінити не вдасться.
 - **Fail closed:** недоступний реєстр, RPC чи сам webhook = Pod не проходить (`failurePolicy: Fail`). Виняток: `kube-system`, `kube-public`, `kube-node-lease` і namespace `oath-system` (щоб не заблокувати кластер).
+- **Helm замість `install.sh`:** `helm install oath deploy/helm/oath -n oath-system --create-namespace --set signer=<pubkey>` (значення: `network`, `mode`, `failurePolicy`, `quorum`, `attestRepo`, `staleOkHours`, `registryAuth`, `auditSchedule`; TLS генерує Helm і не міняє при оновленні). Перевірено в kind: встановлення, відмова, оновлення з `mode=audit`, CronJob аудиту, видалення. Після `helm install` Service може відповідати з затримкою в кілька секунд.
 - `OATH_MODE=audit` дозволяє все, але повертає попередження: зручно для першого впровадження.
 - `OATH_FAILURE_POLICY=Ignore deploy/install.sh` міняє `failurePolicy` на `Ignore` (доступність важливіша за блокування; тоді користуйся `oath audit`). Webhook працює у 2 репліках із PodDisruptionBudget.
 - Приватні реєстри: `OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'` (перевірено на реєстрі з паролем і на моку з Bearer-токеном; кубелет усе одно потребує власних `imagePullSecrets`).

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: oath
+description: Admission webhook that denies Pods whose image digest was not anchored on Solana by your CI signer
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+home: https://github.com/Tymofii-thc/oath

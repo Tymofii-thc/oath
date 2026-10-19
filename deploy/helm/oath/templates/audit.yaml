@@ -1,0 +1,57 @@
+{{- if .Values.auditSchedule }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oath-audit
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: oath-audit
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oath-audit
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: oath-audit }
+subjects:
+  - { kind: ServiceAccount, name: oath-audit, namespace: {{ .Release.Namespace }} }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: oath-audit
+  namespace: {{ .Release.Namespace }}
+spec:
+  schedule: {{ .Values.auditSchedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: oath-audit
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: audit
+              image: {{ .Values.image | quote }}
+              imagePullPolicy: IfNotPresent
+              args: ["bin/oath.mjs", "audit", "--in-cluster", "--signer", {{ .Values.signer | quote }}, "--network", {{ .Values.network | quote }}, "--quorum", {{ .Values.quorum | quote }}]
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { memory: 256Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+{{- end }}

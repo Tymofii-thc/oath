@@ -1,0 +1,117 @@
+{{- $_ := required "set signer=<CI signer public key>" .Values.signer -}}
+{{- $tls := include "oath.tls" . | fromYaml -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oath-webhook-tls
+  namespace: {{ .Release.Namespace }}
+type: kubernetes.io/tls
+data:
+  ca.crt: {{ $tls.ca }}
+  tls.crt: {{ $tls.crt }}
+  tls.key: {{ $tls.key }}
+{{- if .Values.registryAuth }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oath-registry-auth
+  namespace: {{ .Release.Namespace }}
+stringData:
+  auth: {{ .Values.registryAuth | quote }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oath-webhook
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels: { app: oath-webhook }
+  template:
+    metadata:
+      labels: { app: oath-webhook }
+      annotations:
+        checksum/tls: {{ $tls.crt | sha256sum }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: webhook
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: OATH_SIGNER, value: {{ .Values.signer | quote }} }
+            - { name: OATH_NETWORK, value: {{ .Values.network | quote }} }
+            - { name: OATH_MODE, value: {{ .Values.mode | quote }} }
+            - { name: OATH_STALE_OK_HOURS, value: {{ .Values.staleOkHours | quote }} }
+            - { name: OATH_PIN, value: "true" }
+            - { name: OATH_QUORUM, value: {{ .Values.quorum | quote }} }
+            - { name: OATH_ATTEST_REPO, value: {{ .Values.attestRepo | quote }} }
+            {{- if or .Values.registryAuth .Values.registryAuthSecret }}
+            - name: OATH_REGISTRY_AUTH
+              valueFrom: { secretKeyRef: { name: {{ default "oath-registry-auth" .Values.registryAuthSecret }}, key: auth } }
+            {{- end }}
+          ports: [{ containerPort: 8443 }]
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8443, scheme: HTTPS }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8443, scheme: HTTPS }
+          resources:
+            requests: { cpu: 20m, memory: 48Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tls, mountPath: /tls, readOnly: true }
+      volumes:
+        - name: tls
+          secret: { secretName: oath-webhook-tls }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oath-webhook
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: oath-webhook }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oath-webhook
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector: { app: oath-webhook }
+  ports: [{ port: 443, targetPort: 8443 }]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: oath
+webhooks:
+  - name: pods.oath.io
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    timeoutSeconds: 15
+    failurePolicy: {{ .Values.failurePolicy }}
+    reinvocationPolicy: Never
+    namespaceSelector:
+      matchExpressions:
+        - { key: oath.io/exempt, operator: NotIn, values: ["true"] }
+        - { key: kubernetes.io/metadata.name, operator: NotIn, values: ["kube-system", "kube-public", "kube-node-lease", {{ .Release.Namespace | quote }}] }
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+    clientConfig:
+      service: { name: oath-webhook, namespace: {{ .Release.Namespace }}, path: /validate }
+      caBundle: {{ $tls.ca }}
