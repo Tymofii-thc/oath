@@ -39,17 +39,27 @@ if [ -n "$SOLANA_RPC" ]; then
 else
   kubectl -n "$ns" delete secret oath-rpc --ignore-not-found >/dev/null
 fi
+tls_sum="$(sha256sum < "$tmp/tls.crt" | cut -c1-16)"
 rpc_sum="$(printf '%s' "$SOLANA_RPC" | sha256sum | cut -c1-16)"
 
 ca="$(base64 -w0 < "$tmp/ca.crt")"
 # values go into sed replacements: escape the characters that mean something there (a URL with ?a=1&b=2 would otherwise be mangled)
 esc() { printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'; }
-sed -e "s|__OATH_IMAGE__|$(esc "$OATH_IMAGE")|" -e "s|__OATH_SIGNER__|$(esc "$OATH_SIGNER")|" -e "s|__OATH_NETWORK__|$(esc "$OATH_NETWORK")|" -e "s|__FAILURE_POLICY__|$(esc "$OATH_FAILURE_POLICY")|" -e "s|__OATH_MODE__|$(esc "$OATH_MODE")|" -e "s|__OATH_QUORUM__|$(esc "$OATH_QUORUM")|" -e "s|__OATH_STALE_OK_HOURS__|$(esc "$OATH_STALE_OK_HOURS")|" -e "s|__OATH_LIMIT__|$(esc "$OATH_LIMIT")|" -e "s|__OATH_ATTEST_REPO__|$(esc "$OATH_ATTEST_REPO")|" -e "s|__CA_BUNDLE__|$(esc "$ca")|" -e "s|__RPC_SUM__|$rpc_sum|" "$here/k8s/oath.yaml" | kubectl apply -f -
+sed -e "s|__OATH_IMAGE__|$(esc "$OATH_IMAGE")|" -e "s|__OATH_SIGNER__|$(esc "$OATH_SIGNER")|" -e "s|__OATH_NETWORK__|$(esc "$OATH_NETWORK")|" -e "s|__FAILURE_POLICY__|$(esc "$OATH_FAILURE_POLICY")|" -e "s|__OATH_MODE__|$(esc "$OATH_MODE")|" -e "s|__OATH_QUORUM__|$(esc "$OATH_QUORUM")|" -e "s|__OATH_STALE_OK_HOURS__|$(esc "$OATH_STALE_OK_HOURS")|" -e "s|__OATH_LIMIT__|$(esc "$OATH_LIMIT")|" -e "s|__OATH_ATTEST_REPO__|$(esc "$OATH_ATTEST_REPO")|" -e "s|__CA_BUNDLE__|$(esc "$ca")|" -e "s|__RPC_SUM__|$rpc_sum|" -e "s|__TLS_SUM__|$tls_sum|" "$here/k8s/oath.yaml" | kubectl apply -f -
 kubectl -n "$ns" rollout status deploy/oath-webhook --timeout=120s
-# Optional: periodic audit of Pods that were already running before the webhook (cron expression, e.g. "*/30 * * * *")
-if [ -n "${OATH_AUDIT_SCHEDULE:-}" ]; then
+# Pods that were already running are not seen by the webhook, so audit them: hourly by default, and once right now.
+# OATH_AUDIT_SCHEDULE is a cron expression; "off" skips the CronJob and the first run.
+OATH_AUDIT_SCHEDULE="${OATH_AUDIT_SCHEDULE-0 * * * *}"
+if [ -n "$OATH_AUDIT_SCHEDULE" ] && [ "$OATH_AUDIT_SCHEDULE" != off ]; then
   sed -e "s|__OATH_IMAGE__|$(esc "$OATH_IMAGE")|" -e "s|__OATH_SIGNER__|$(esc "$OATH_SIGNER")|" -e "s|__OATH_NETWORK__|$(esc "$OATH_NETWORK")|" -e "s|__OATH_QUORUM__|$(esc "$OATH_QUORUM")|" -e "s|__OATH_AUDIT_SCHEDULE__|$(esc "$OATH_AUDIT_SCHEDULE")|" "$here/k8s/audit-cronjob.yaml" | kubectl apply -f -
   echo "Audit CronJob installed (schedule: $OATH_AUDIT_SCHEDULE). Failed jobs = unverified or revoked Pods: kubectl -n $ns get jobs"
+  first="oath-audit-first-$(date +%s)"
+  if kubectl -n "$ns" create job "$first" --from=cronjob/oath-audit >/dev/null; then
+    echo "Auditing the Pods that are already running..."
+    kubectl -n "$ns" wait --for=condition=complete "job/$first" --timeout=120s >/dev/null 2>&1 || true
+    kubectl -n "$ns" logs "job/$first" 2>/dev/null || true
+    kubectl -n "$ns" delete job "$first" --ignore-not-found >/dev/null 2>&1 || true
+  fi
 fi
 
 # "rollout finished" does not mean the Service accepts connections yet: probe until the API server can actually call the webhook

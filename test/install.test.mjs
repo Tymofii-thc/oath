@@ -48,3 +48,21 @@ test("install.sh substitutes values that contain '&' (e.g. the image reference)"
   assert.equal(r.status, 0, r.stderr);
   assert.ok(readFileSync(applied, "utf8").includes('value: "A&B|C"'));
 });
+
+test("install.sh audits already-running Pods by default (CronJob + one run now) and OATH_AUDIT_SCHEDULE=off skips it", () => {
+  const run = (extra) => {
+    const dir = mkdtempSync(join(tmpdir(), "oath-audit-"));
+    const calls = join(dir, "calls.txt"), applied = join(dir, "applied.yaml");
+    writeFileSync(join(dir, "kubectl"), `#!/bin/sh\necho "$@" >> "${calls}"\ncase "$*" in *apply*) cat >> "${applied}";; esac\nexit 0\n`);
+    chmodSync(join(dir, "kubectl"), 0o755);
+    const r = spawnSync("bash", [join(root, "deploy/install.sh")], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, OATH_SIGNER: "S", OATH_IMAGE: "img:1", ...extra }, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    return { yaml: readFileSync(applied, "utf8"), calls: readFileSync(calls, "utf8") };
+  };
+  const on = run({});
+  assert.match(on.yaml, /schedule: "0 \* \* \* \*"/);
+  assert.match(on.calls, /create job oath-audit-first-\d+ --from=cronjob\/oath-audit/);
+  const off = run({ OATH_AUDIT_SCHEDULE: "off" });
+  assert.ok(!off.yaml.includes("kind: CronJob"));
+  assert.ok(!off.calls.includes("--from=cronjob"));
+});

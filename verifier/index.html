@@ -249,6 +249,7 @@ npx --yes --allow-git=all github:Tymofii-thc/oath verify --signer &lt;pubkey&gt;
             <tr><th scope="row" data-i18n="r7_s">Registry, RPC or webhook down</th><td><span class="pill neutral" data-i18n="tag_closed">Fail closed</span></td><td data-i18n="r7_w">New Pods are refused, running Pods are untouched. The CLI exits 2.</td></tr>
             <tr><th scope="row" data-i18n="r8_s">Forged record that only mentions the signer</th><td><span class="pill ok" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r8_w">Only transactions the signer actually signed count.</td></tr>
             <tr><th scope="row" data-i18n="r9_s">Running Pod's image edited, or debug container added</th><td><span class="pill ok" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r9_w">The webhook checks updates and ephemeral containers too.</td></tr>
+            <tr><th scope="row" data-i18n="r10_s">Pods that were already running before install</th><td><span class="pill warn" data-i18n="tag_mitigated">Mitigated</span></td><td data-i18n="r10_w">install.sh and Helm audit them at once and then every hour; a failed Job means an unverified or revoked image.</td></tr>
           </tbody>
         </table>
       </div>
@@ -259,7 +260,6 @@ npx --yes --allow-git=all github:Tymofii-thc/oath verify --signer &lt;pubkey&gt;
           <li><strong data-i18n="nc1_h">Stolen CI signing key.</strong> <span data-i18n="nc1_p">Whoever holds it can record a forged digest. --quorum 2 adds a second approver key but is off by default. Rotation, revocation and --max-age limit the damage. The approve page is tested with Phantom only.</span></li>
           <li><strong data-i18n="nc2_h">Malicious code built honestly.</strong> <span data-i18n="nc2_p">The chain proves the signer recorded a digest, not that the code is safe. --attest checks which workflow built the image, not what is in it.</span></li>
           <li><strong data-i18n="nc3_h">Mainnet in CI.</strong> <span data-i18n="nc3_p">Supported, but CI has not run on live mainnet. devnet is the default and has no retention guarantee.</span></li>
-          <li><strong data-i18n="nc4_h">Availability and existing Pods.</strong> <span data-i18n="nc4_p">An RPC or registry outage blocks new Pods (images verified in the last hour still pass). Pods created before install need oath audit.</span></li>
         </ul>
       </div>
       <p class="links-row"><a class="link-u" href="https://github.com/Tymofii-thc/oath/blob/main/THREAT-MODEL.md" rel="noopener" data-i18n="thr_more">Full threat model →</a></p>

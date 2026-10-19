@@ -29,7 +29,7 @@ That a container image running in your cluster (or about to be deployed) is **on
 
 ## Not covered
 - Anything about the *content* of an honestly built image.
-- Pods created before the webhook was installed: use `oath audit` or the audit CronJob.
+- Pods created before the webhook was installed: `install.sh` and the Helm chart run `oath audit` once at install and then hourly (a failed Job = unverified or revoked image). Detection, not blocking: those Pods keep running.
 - Namespaces exempt from the webhook (`kube-system`, `kube-public`, `kube-node-lease`, the webhook's own namespace, and any labelled `oath.io/exempt=true`). Anyone who can label a namespace can exempt it: restrict that permission.
 - An attacker with cluster-admin can delete the webhook configuration.
 - Revocation is seen by the webhook after its cache expires (up to 5 minutes).

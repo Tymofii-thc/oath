@@ -20,6 +20,7 @@ spec:
       labels: { app: oath-webhook }
       annotations:
         oath.io/rpc-checksum: "__RPC_SUM__"       # changes with SOLANA_RPC so the Pods restart and pick up the new Secret value
+        oath.io/tls-checksum: "__TLS_SUM__"       # install.sh makes a new CA each run: restart the Pods so they serve the certificate the caBundle now trusts
     spec:
       securityContext:
         runAsNonRoot: true
