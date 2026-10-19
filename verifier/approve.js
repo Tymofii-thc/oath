@@ -12,6 +12,96 @@
   let provider = null;
   let wallet = null; // PublicKey
 
+  /* ---------- i18n ---------- */
+  const I18N = {
+    en: {
+      skip: 'Skip to content',
+      lang_label: 'Language',
+      nav_label: 'Site',
+      nav_verify: 'Verify',
+      brand_back: 'oath, back to the main page',
+      ap_h1: 'Approve a build or revoke a digest with your wallet',
+      ap_lead: 'Sign one Memo transaction as the second signer (--quorum 2). Your private key never leaves the wallet.',
+      ap_warn: 'Compare the digest with the CI log of the build you approve. An unchecked approval defeats the purpose.',
+      ap_connect: 'Connect wallet',
+      ap_not_connected: 'not connected',
+      ap_mode: 'Action',
+      ap_mode_approve: 'Approve a build',
+      ap_mode_revoke: 'Revoke a digest',
+      ap_net: 'Network',
+      ap_image: 'Image name',
+      ap_commit: 'Commit',
+      ap_digest: 'Image digest',
+      ap_reason: 'Reason',
+      ap_reason_ph: 'why this digest is bad',
+      ap_preview_l: 'Memo to sign',
+      ap_sign: 'Sign with wallet',
+      ap_result: 'result',
+      ap_idle: 'Connect a wallet, check the memo, then sign.',
+      ap_fill: '(fill in the fields)',
+      ap_time: '<time of signing>',
+      ap_e_digest: 'The digest must look like sha256:<64 hex characters>.',
+      ap_e_image: 'Enter the image name (for example ghcr.io/owner/app).',
+      ap_e_commit: 'The commit must be 7-40 hex characters.',
+      ap_nowallet: 'No Solana wallet found in this browser. Install Phantom or Solflare and reload.',
+      ap_refused: 'Wallet connection was refused: {msg}',
+      ap_waiting: 'Waiting for your wallet to sign…',
+      ap_sending: 'Sending…',
+      ap_done_approve: 'Approved. Signed by {w}',
+      ap_done_revoke: 'Revoked. Signed by {w}',
+      ap_hint_approve: 'Verify with both signers: oath verify --signer {ci},{w} --quorum 2 --digest {d}',
+      ap_hint_revoke: 'oath verify now reports this digest as REVOKED.',
+      ap_view_tx: 'View the transaction in Solana Explorer',
+      ap_fail: 'Not signed or not sent: {msg}',
+    },
+    uk: {
+      skip: 'Перейти до змісту',
+      lang_label: 'Мова',
+      nav_label: 'Сайт',
+      nav_verify: 'Перевірка',
+      brand_back: 'oath, назад на головну сторінку',
+      ap_h1: 'Затвердіть збірку або відкличте digest своїм гаманцем',
+      ap_lead: 'Підпишіть одну Memo-транзакцію як другий підписант (--quorum 2). Приватний ключ не залишає гаманець.',
+      ap_warn: 'Звірте digest із журналом CI збірки, яку затверджуєте. Затвердження без перевірки втрачає сенс.',
+      ap_connect: 'Підключити гаманець',
+      ap_not_connected: 'не підключено',
+      ap_mode: 'Дія',
+      ap_mode_approve: 'Затвердити збірку',
+      ap_mode_revoke: 'Відкликати digest',
+      ap_net: 'Мережа',
+      ap_image: 'Імʼя образу',
+      ap_commit: 'Коміт',
+      ap_digest: 'Digest образу',
+      ap_reason: 'Причина',
+      ap_reason_ph: 'чому цей digest поганий',
+      ap_preview_l: 'Memo для підпису',
+      ap_sign: 'Підписати гаманцем',
+      ap_result: 'результат',
+      ap_idle: 'Підключіть гаманець, перевірте memo і підпишіть.',
+      ap_fill: '(заповніть поля)',
+      ap_time: '<час підпису>',
+      ap_e_digest: 'Digest має виглядати як sha256:<64 шістнадцяткові символи>.',
+      ap_e_image: 'Вкажіть імʼя образу (наприклад, ghcr.io/owner/app).',
+      ap_e_commit: 'Коміт має містити 7-40 шістнадцяткових символів.',
+      ap_nowallet: 'У цьому браузері не знайдено гаманця Solana. Встановіть Phantom або Solflare й перезавантажте сторінку.',
+      ap_refused: 'Підключення гаманця відхилено: {msg}',
+      ap_waiting: 'Чекаю на підпис у гаманці…',
+      ap_sending: 'Надсилаю…',
+      ap_done_approve: 'Затверджено. Підписав {w}',
+      ap_done_revoke: 'Відкликано. Підписав {w}',
+      ap_hint_approve: 'Перевірка з обома підписантами: oath verify --signer {ci},{w} --quorum 2 --digest {d}',
+      ap_hint_revoke: 'Тепер oath verify показує цей digest як REVOKED.',
+      ap_view_tx: 'Переглянути транзакцію в Solana Explorer',
+      ap_fail: 'Не підписано або не надіслано: {msg}',
+    },
+  };
+  let lang = 'en';
+  const t = (key, vars) => {
+    let s = (I18N[lang] && I18N[lang][key]) ?? I18N.en[key] ?? key;
+    if (vars) for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(String(vars[k]));
+    return s;
+  };
+
   // web3.js wants its own Buffer type for instruction data but does not export it; an instance of it is available from any PublicKey.
   const bufferFrom = (bytes) => wallet.toBuffer().constructor.from(bytes);
   const clean = (s) => String(s || '').replace(/[|\r\n]+/g, ' ').trim();
@@ -20,13 +110,13 @@
   function build(now) {
     const mode = $('a-mode').value;
     const digest = $('a-digest').value.trim().toLowerCase();
-    if (!DIGEST_RE.test(digest)) return { error: 'The digest must look like sha256:<64 hex characters>.' };
+    if (!DIGEST_RE.test(digest)) return { error: t('ap_e_digest') };
     const iso = (now || new Date()).toISOString();
     if (mode === 'revoke') return { text: `pod1r|${digest}|${clean($('a-reason').value).slice(0, 100)}|${iso}` };
     const image = clean($('a-image').value);
     const commit = $('a-commit').value.trim().toLowerCase();
-    if (!image) return { error: 'Enter the image name (for example ghcr.io/owner/app).' };
-    if (!/^[0-9a-f]{7,40}$/.test(commit)) return { error: 'The commit must be 7-40 hex characters.' };
+    if (!image) return { error: t('ap_e_image') };
+    if (!/^[0-9a-f]{7,40}$/.test(commit)) return { error: t('ap_e_commit') };
     return { text: `pod1|${image}|${commit.slice(0, 12)}|${digest}|${iso}` };
   }
 
@@ -35,8 +125,8 @@
     $('f-image').hidden = isRevoke; $('f-commit').hidden = isRevoke; $('f-reason').hidden = !isRevoke;
     const b = build(new Date(0));
     const pre = $('a-preview');
-    if (b.error) { pre.textContent = '(fill in the fields)'; $('a-err').hidden = true; }
-    else { pre.textContent = b.text.replace(/\|1970-01-01T00:00:00\.000Z$/, '|<time of signing>'); $('a-err').hidden = true; }
+    if (b.error) { pre.textContent = t('ap_fill'); $('a-err').hidden = true; }
+    else { pre.textContent = b.text.replace(/\|1970-01-01T00:00:00\.000Z$/, '|' + t('ap_time')); $('a-err').hidden = true; }
     $('a-sign').disabled = !wallet || !!b.error;
   }
 
@@ -46,24 +136,29 @@
 
   async function connect() {
     provider = findProvider();
-    if (!provider) { show('bad', ['No Solana wallet found in this browser. Install Phantom or Solflare and reload.']); return; }
+    if (!provider) { show('bad', [['ap_nowallet']]); return; }
     try {
       const res = await provider.connect();
       const pk = (res && res.publicKey) || provider.publicKey;
       wallet = new solanaWeb3.PublicKey(pk.toString());
+      $('a-wallet').removeAttribute('data-i18n');
       $('a-wallet').textContent = wallet.toBase58();
       refresh();
     } catch (e) {
-      show('bad', ['Wallet connection was refused: ' + (e && e.message ? e.message : e)]);
+      show('bad', [['ap_refused', { msg: e && e.message ? e.message : e }]]);
     }
   }
 
+  /* The result area is re-rendered on language change, so what is shown is kept as data:
+     a line is a plain string (shown as is) or [i18nKey, vars]. */
+  let last = null;
   function show(kind, lines, link) {
+    last = { kind, lines, link };
     const out = $('out');
     out.replaceChildren();
     for (const l of lines) {
       const d = document.createElement('div');
-      d.textContent = l;
+      d.textContent = Array.isArray(l) ? t(l[0], l[1]) : l;
       if (kind === 'bad') d.className = 'badc';
       if (kind === 'ok') d.className = 'good';
       out.appendChild(d);
@@ -71,7 +166,7 @@
     if (link) {
       const d = document.createElement('div');
       const a = document.createElement('a');
-      a.href = link; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'View the transaction in Solana Explorer';
+      a.href = link; a.target = '_blank'; a.rel = 'noopener'; a.textContent = t('ap_view_tx');
       d.appendChild(a); out.appendChild(d);
     }
   }
@@ -84,7 +179,7 @@
     const net = NETS[$('a-net').value] || NETS.devnet;
     const { Connection, Transaction, TransactionInstruction, PublicKey } = solanaWeb3;
     $('a-sign').disabled = true;
-    show('', ['Waiting for your wallet to sign…']);
+    show('', [['ap_waiting']]);
     try {
       const conn = new Connection(net.rpc, 'confirmed');
       const ix = new TransactionInstruction({
@@ -97,24 +192,43 @@
       const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
       tx.recentBlockhash = blockhash;
       const signed = await provider.signTransaction(tx);
-      show('', ['Sending…']);
+      show('', [['ap_sending']]);
       const signature = await conn.sendRawTransaction(signed.serialize());
       await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-      const verb = $('a-mode').value === 'revoke' ? 'Revoked' : 'Approved';
+      const revoke = $('a-mode').value === 'revoke';
       const ci = new URLSearchParams(location.search).get('ci') || '<ci key>';
       show('ok', [
-        `${verb}. Signed by ${wallet.toBase58()}`,
+        [revoke ? 'ap_done_revoke' : 'ap_done_approve', { w: wallet.toBase58() }],
         b.text,
         '',
-        $('a-mode').value === 'revoke'
-          ? 'oath verify now reports this digest as REVOKED.'
-          : `Verify with both signers: oath verify --signer ${ci},${wallet.toBase58()} --quorum 2 --digest ${$('a-digest').value.trim()}`,
+        revoke ? ['ap_hint_revoke'] : ['ap_hint_approve', { ci, w: wallet.toBase58(), d: $('a-digest').value.trim() }],
       ], `https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=${net.cluster}`);
     } catch (e) {
-      show('bad', ['Not signed or not sent: ' + (e && e.message ? e.message : e)]);
+      show('bad', [['ap_fail', { msg: e && e.message ? e.message : e }]]);
     } finally {
       refresh();
     }
+  }
+
+  function applyLang(next) {
+    lang = next;
+    document.documentElement.lang = lang;
+    for (const n of document.querySelectorAll('[data-i18n]')) n.textContent = t(n.dataset.i18n);
+    for (const n of document.querySelectorAll('[data-i18n-attr]')) {
+      for (const pair of n.dataset.i18nAttr.split(',')) {
+        const [attr, key] = pair.split(':');
+        n.setAttribute(attr.trim(), t(key.trim()));
+      }
+    }
+    for (const b of document.querySelectorAll('.lang [data-lang]')) b.setAttribute('aria-pressed', b.dataset.lang === lang ? 'true' : 'false');
+    for (const a of document.querySelectorAll('a[data-keep-lang]')) a.setAttribute('href', a.dataset.keepLang + '?lang=' + lang);
+    if (last) show(last.kind, last.lines, last.link);
+    refresh();
+    try {
+      const q = new URLSearchParams(location.search);
+      q.set('lang', lang);
+      history.replaceState(null, '', '?' + q.toString() + location.hash);
+    } catch { /* file:// and sandboxed frames may refuse; not important */ }
   }
 
   function init() {
@@ -126,7 +240,9 @@
     for (const id of ['a-mode', 'a-image', 'a-commit', 'a-digest', 'a-reason', 'a-net']) $(id).addEventListener('input', refresh);
     $('a-connect').addEventListener('click', connect);
     $('aform').addEventListener('submit', sign);
-    refresh();
+    for (const b of document.querySelectorAll('.lang [data-lang]')) b.addEventListener('click', () => applyLang(b.dataset.lang));
+    const ql = (q.get('lang') || '').toLowerCase();
+    applyLang(ql === 'uk' || ql === 'en' ? ql : ((navigator.language || 'en').toLowerCase().startsWith('uk') ? 'uk' : 'en'));
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

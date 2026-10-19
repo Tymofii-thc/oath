@@ -5,11 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <title>Oath — proof of deploy</title>
-<meta name="description" content="Oath records every CI build digest in Solana and blocks deploys of images the pipeline did not build.">
+<meta name="description" content="Oath records every CI build digest on Solana and blocks deploys of images the pipeline did not build.">
 <meta property="og:title" content="oath.">
 <meta property="og:description" content="Don't deploy what the pipeline didn't build.">
 <meta property="og:image" content="https://tymofii-thc.github.io/oath/assets/social-preview.png">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="style.css">
 <script src="app.js" defer></script>
 </head>
@@ -21,12 +24,15 @@
     <a class="brand" href="#top" aria-label="oath">
       <svg viewBox="67 -1490 4406 1514" aria-hidden="true" focusable="false"><path d="M573 24C875 24 1078 -201 1078 -526C1078 -853 875 -1080 573 -1080C271 -1080 67 -853 67 -526C67 -201 271 24 573 24ZM573 -158C392 -158 281 -301 281 -526C281 -753 393 -898 573 -898C753 -898 865 -753 865 -526C865 -302 754 -158 573 -158Z"/><path d="M1647 17C1829 17 1915 -65 1959 -150H1963V0H2171V-724C2171 -939 2012 -1077 1752 -1077C1488 -1077 1317 -935 1307 -734H1514C1522 -831 1614 -904 1749 -904C1883 -904 1962 -830 1962 -728V-719C1962 -642 1896 -644 1698 -620C1483 -595 1281 -543 1281 -302C1281 -91 1437 17 1647 17ZM1690 -153C1567 -153 1491 -207 1491 -298C1491 -405 1595 -446 1710 -463C1822 -479 1934 -496 1963 -519V-395C1963 -265 1876 -153 1690 -153Z"/><path d="M2978 -1056H2764V-1344H2552V-1056H2366V-882H2552V-252C2552 -82 2647 0 2845 0H2978V-174H2875C2791 -174 2764 -201 2764 -279V-882H2978Z"/><path d="M3416 -608C3416 -804 3527 -888 3671 -888C3817 -888 3902 -801 3902 -632V0H4113V-658C4113 -934 3948 -1077 3731 -1077C3594 -1077 3488 -1019 3416 -904V-1490H3205V0H3416Z"/><circle cx="4348.0" cy="-117.0" r="125.0"/></svg>
     </a>
-    <nav class="bar-right" aria-label="Site">
+    <nav class="bar-right" aria-label="Site" data-i18n-attr="aria-label:nav_label">
+      <a class="link nav-sec" href="#verify" data-i18n="nav_verify">Verify</a>
+      <a class="link nav-sec" href="#how" data-i18n="nav_how">How it works</a>
+      <a class="link nav-sec" href="#threats" data-i18n="tm">Threat model</a>
+      <a class="link" href="https://github.com/Tymofii-thc/oath" rel="noopener">GitHub</a>
       <div class="lang" role="group" aria-label="Language" data-i18n-attr="aria-label:lang_label">
         <button type="button" data-lang="en" aria-pressed="true">EN</button>
-        <button type="button" data-lang="uk" aria-pressed="false">UA</button>
+        <button type="button" data-lang="uk" aria-pressed="false">UK</button>
       </div>
-      <a class="link" href="https://github.com/Tymofii-thc/oath" rel="noopener">GitHub</a>
     </nav>
   </div>
 </header>
@@ -34,52 +40,29 @@
 <main id="main">
 
   <section class="hero" aria-labelledby="hero-h">
-    <div class="wrap">
+    <div class="wrap hero-grid">
       <h1 id="hero-h" data-i18n="hero_h1">Don't deploy what the pipeline didn't build.</h1>
-      <p class="lead" data-i18n="hero_p">Oath stops an image from reaching production unless your own pipeline built it. Every CI build records commit → digest → time in Solana, as a standard Memo transaction signed by the CI key. Before deploy, oath verify checks the image digest against those records and blocks the deploy if there is none.</p>
-      <div class="cta">
-        <button type="button" class="btn primary" id="cta-run" data-i18n="cta_run">Run live check</button>
-        <a class="btn ghost" href="#integrate" data-i18n="cta_docs">Integrate in 3 steps</a>
-      </div>
-      <ul class="facts">
-        <li data-i18n="fact1">Standard Memo program, no custom smart contract</li>
-        <li data-i18n="fact2">CLI and Kubernetes admission webhook</li>
-        <li data-i18n="fact3">devnet by default, mainnet supported</li>
-      </ul>
-    </div>
-  </section>
-
-  <section class="section" aria-labelledby="flow-h">
-    <div class="wrap">
-      <h2 id="flow-h" data-i18n="flow_h">How it works</h2>
-      <ol class="flow">
-        <li class="step"><span class="n">01</span><b>git commit</b><span class="sub" data-i18n="s1_sub">source revision</span></li>
-        <li class="step"><span class="n">02</span><b>CI build</b><span class="sub" data-i18n="s2_sub">image digest</span></li>
-        <li class="step"><span class="n">03</span><b>Solana Memo tx</b><span class="sub" data-i18n="s3_sub">signed by the CI key</span></li>
-        <li class="step gate"><span class="n">04</span><b>verify gate</b><span class="sub" data-i18n="s4_sub">oath verify · admission webhook</span></li>
-      </ol>
-      <div class="outcomes">
-        <p class="outcome ok"><span class="code">exit 0</span> <span data-i18n="out_ok">verified, the deploy proceeds</span></p>
-        <p class="outcome bad"><span class="code">exit 1 / denied</span> <span data-i18n="out_bad">no record, the deploy is stopped</span></p>
-      </div>
-      <div class="format">
-        <h3 data-i18n="fmt_h">Record format</h3>
-        <p class="muted" data-i18n="fmt_p">One Memo per build, fields separated by a vertical bar:</p>
-        <pre class="code-block"><code>pod1|ghcr.io/me/app|3f9a1c0d2b7e|sha256:&lt;64 hex&gt;|2026-10-12T21:04:11Z</code></pre>
-        <p class="muted small" data-i18n="fmt_legend">version | image name (the record is bound to it) | first 12 characters of the commit | image digest | ISO time</p>
+      <div class="hero-side">
+        <p class="lead" data-i18n="hero_p">Every CI build writes its image digest to Solana. Before deploy, oath verify or a Kubernetes webhook blocks any image with no record.</p>
+        <div class="cta">
+          <button type="button" class="btn primary" id="cta-run" data-i18n="cta_run">Try the verifier</button>
+          <a class="btn" href="#setup" data-i18n="cta_docs">Set up in 3 steps</a>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="verify" aria-labelledby="verify-h">
+  <section class="verify" id="verify" aria-labelledby="verify-h">
     <div class="wrap">
-      <h2 id="verify-h" data-i18n="live_h">Live verifier</h2>
-      <p class="lead" data-i18n="live_p">Runs in your browser: it queries the Solana RPC directly with the same logic as the CLI.</p>
+      <div class="sec-head">
+        <h2 id="verify-h" data-i18n="live_h">Verify an image</h2>
+        <p class="muted small" data-i18n="live_p">Runs in your browser. Same logic as the CLI.</p>
+      </div>
       <div class="verify-grid">
         <form id="vform" class="panel" novalidate autocomplete="off">
           <div class="field">
-            <label for="f-key" data-i18n="f_signer">Signer (public key, comma-separated)</label>
-            <input id="f-key" class="mono" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="e-key">
+            <label for="f-key" data-i18n="f_signer">Signer public key</label>
+            <input id="f-key" class="mono" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="e-key" data-i18n-attr="placeholder:f_signer_ph" placeholder="one or more, comma-separated">
             <p id="e-key" class="err" hidden></p>
           </div>
           <div class="field">
@@ -91,147 +74,181 @@
           </div>
           <div class="field">
             <label for="f-digest" data-i18n="f_digest">Image digest</label>
-            <input id="f-digest" class="mono" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="e-digest">
+            <input id="f-digest" class="mono" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="e-digest" placeholder="sha256:…">
             <p id="e-digest" class="err" hidden></p>
           </div>
           <div class="presets" role="group" aria-labelledby="preset-l">
-            <span id="preset-l" class="small muted" data-i18n="presets">One-click demo</span>
-            <button type="button" class="btn ghost" id="p-good" data-i18n="p_good">known-good digest</button>
-            <button type="button" class="btn ghost" id="p-bad" data-i18n="p_bad">tampered digest</button>
+            <span id="preset-l" class="small muted" data-i18n="presets">Try an example</span>
+            <button type="button" class="preset" id="p-good" data-i18n="p_good">A built image</button>
+            <button type="button" class="preset" id="p-bad" data-i18n="p_bad">A swapped image</button>
           </div>
           <button type="submit" class="btn primary wide" id="b-verify">oath verify</button>
         </form>
 
         <div class="term" id="term" data-state="idle">
           <div class="term-bar">
-            <span data-i18n="term_title">terminal output</span>
+            <span data-i18n="term_title">terminal</span>
             <span class="chip" id="term-chip">idle</span>
           </div>
           <div class="term-body" id="term-body" role="status" aria-live="polite" aria-atomic="true" aria-busy="false"><pre id="out"></pre></div>
         </div>
       </div>
+
+      <details class="box records" id="records">
+        <summary id="rec-h" data-i18n="rec_h">Signer records</summary>
+        <div class="box-body">
+          <div class="head-row">
+            <p class="muted small" data-i18n="rec_p">Newest first.</p>
+            <button type="button" class="btn small-btn" id="b-records" data-i18n="rec_load">Load records</button>
+          </div>
+          <p id="rec-status" class="muted small" role="status" aria-live="polite"></p>
+          <div class="table-wrap" tabindex="0" role="region" aria-labelledby="rec-h">
+            <table id="rec-table">
+              <thead>
+                <tr>
+                  <th scope="col" data-i18n="c_time">Time</th>
+                  <th scope="col" data-i18n="c_commit">Commit</th>
+                  <th scope="col" data-i18n="c_image">Image</th>
+                  <th scope="col" data-i18n="c_digest">Digest</th>
+                  <th scope="col" data-i18n="c_tx">Transaction</th>
+                </tr>
+              </thead>
+              <tbody id="rec-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </details>
     </div>
   </section>
 
-  <section class="section" id="integrate" aria-labelledby="int-h">
+  <section class="section" id="how" aria-labelledby="flow-h">
     <div class="wrap">
-      <h2 id="int-h" data-i18n="int_h">Integrate</h2>
-      <p class="lead" data-i18n="int_p">Three steps: create a CI key, anchor after the build, verify before the deploy.</p>
+      <h2 id="flow-h" data-i18n="flow_h">How it works</h2>
+      <ol class="flow">
+        <li class="step">
+          <svg class="glyph" viewBox="0 0 112 72" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <rect x="22" y="6" width="68" height="16" rx="3"/>
+            <rect x="14" y="28" width="84" height="16" rx="3"/>
+            <rect x="6" y="50" width="100" height="16" rx="3"/>
+          </svg>
+          <h3 data-i18n="st1_t">Build</h3>
+          <p class="muted" data-i18n="st1_p">CI builds the image.</p>
+          <svg class="arrow" viewBox="0 0 32 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M1 6h29M25 1l5 5-5 5"/></svg>
+        </li>
+        <li class="step">
+          <svg class="glyph" viewBox="0 0 112 72" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <rect x="4" y="20" width="28" height="32" rx="3" stroke-opacity=".5"/>
+            <rect x="42" y="20" width="28" height="32" rx="3" stroke-opacity=".5"/>
+            <rect x="80" y="20" width="28" height="32" rx="3" stroke-width="2.25"/>
+            <path d="M32 36h10M70 36h10" stroke-opacity=".5"/>
+            <path d="M88 33h12M88 39h8" stroke-linecap="round"/>
+          </svg>
+          <h3 data-i18n="st2_t">Record</h3>
+          <p class="muted" data-i18n="st2_p">Its digest goes to Solana, signed by the CI key.</p>
+          <svg class="arrow" viewBox="0 0 32 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M1 6h29M25 1l5 5-5 5"/></svg>
+        </li>
+        <li class="step">
+          <svg class="glyph" viewBox="0 0 112 72" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M4 36h30"/>
+            <rect x="34" y="12" width="12" height="48" rx="3"/>
+            <path d="M46 24h20" class="g-ok"/>
+            <path d="M74 24l6 6 12-13" class="g-ok" stroke-width="2.25"/>
+            <path d="M46 48h20" class="g-bad"/>
+            <path d="M76 42l14 14M90 42L76 56" class="g-bad" stroke-width="2.25"/>
+          </svg>
+          <h3 data-i18n="st3_t">Verify</h3>
+          <p class="muted" data-i18n="st3_p">Before deploy, oath verify or the webhook looks for a record.</p>
+        </li>
+      </ol>
+
+      <details class="more">
+        <summary data-i18n="details">Details</summary>
+        <div class="more-body">
+          <p class="outcome"><span class="code ok">exit 0</span> <span data-i18n="out_ok">verified, the deploy proceeds</span></p>
+          <p class="outcome"><span class="code bad">exit 1</span> <span data-i18n="out_bad">no record, the deploy stops</span></p>
+          <p class="muted" data-i18n="fmt_p">One Memo per build:</p>
+          <pre class="code-block wrap-code"><code>pod1|ghcr.io/me/app|3f9a1c0d2b7e|sha256:&lt;64 hex&gt;|2026-10-12T21:04:11Z</code></pre>
+          <p class="muted small" data-i18n="fmt_legend">version | image name | commit (12 chars) | image digest | time</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="section" id="setup" aria-labelledby="int-h">
+    <div class="wrap">
+      <h2 id="int-h" data-i18n="int_h">Set up</h2>
+      <p class="lead" data-i18n="int_p">Run oath init once to create the CI key. Then:</p>
       <div class="tabs">
         <div class="tablist" role="tablist" aria-label="Integration" data-i18n-attr="aria-label:int_tabs">
           <button type="button" role="tab" id="tab-gh" aria-controls="panel-gh" aria-selected="true" tabindex="0">GitHub Actions</button>
-          <button type="button" role="tab" id="tab-cli" aria-controls="panel-cli" aria-selected="false" tabindex="-1">CLI</button>
           <button type="button" role="tab" id="tab-k8s" aria-controls="panel-k8s" aria-selected="false" tabindex="-1">Kubernetes</button>
+          <button type="button" role="tab" id="tab-cli" aria-controls="panel-cli" aria-selected="false" tabindex="-1">CLI</button>
         </div>
 
         <div role="tabpanel" id="panel-gh" aria-labelledby="tab-gh" class="tabpanel" tabindex="0">
-          <p class="muted" data-i18n="gh_p">Add the secret SOLANA_SECRET_KEY and the variable OATH_SIGNER (the public key) to the repository. For devnet SOL use faucet.solana.com.</p>
+          <p class="muted" data-i18n="gh_p">Add SOLANA_SECRET_KEY as a secret and OATH_SIGNER (the public key) as a variable.</p>
           <div class="code-wrap"><button type="button" class="copy" data-copy="code-gh" data-i18n="copy">Copy</button>
-<pre class="code-block" id="code-gh"><code># once: create the CI key (writes .oath/ci-key.json, funds it, prints what to add)
-npx --yes --allow-git=all github:Tymofii-thc/oath init
-
-# in your workflow, after the build: anchor the digest
+<pre class="code-block" id="code-gh"><code># after the build: record the digest
 - uses: Tymofii-thc/oath@main
   with:
     image: ghcr.io/${{ github.repository }}
     digest: ${{ steps.build.outputs.digest }}
     secret-key: ${{ secrets.SOLANA_SECRET_KEY }}
 
-# before the deploy: pulls the image and fails the job if there is no record
+# before the deploy: fail the job if there is no record
 - uses: Tymofii-thc/oath/verify@main
   with:
     signer: ${{ vars.OATH_SIGNER }}
     image: ghcr.io/${{ github.repository }}:latest</code></pre></div>
         </div>
 
-        <div role="tabpanel" id="panel-cli" aria-labelledby="tab-cli" class="tabpanel" tabindex="0" hidden>
-          <p class="muted" data-i18n="cli_p">No dependencies. Exit codes: 0 verified, 1 not verified, 2 error (network, arguments).</p>
-          <div class="code-wrap"><button type="button" class="copy" data-copy="code-cli" data-i18n="copy">Copy</button>
-<pre class="code-block" id="code-cli"><code>node bin/oath.mjs init                                           # create and fund a CI key, print the next steps
-node bin/oath.mjs verify --signer &lt;pubkey&gt; --digest sha256:…
-node bin/oath.mjs verify --signer &lt;pubkey&gt; --image ghcr.io/me/app:latest
-node bin/oath.mjs verify --signer &lt;pubkey&gt; --container prod    # the image running NOW
-node bin/oath.mjs audit  --signer &lt;pubkey&gt;                      # every Pod running in the current cluster
-
-# several signers (key rotation) and a maximum record age
-node bin/oath.mjs verify --signer &lt;a&gt;,&lt;b&gt; --max-age 30 --image ghcr.io/me/app:latest
-
-# a second signer must also have recorded it, plus a Sigstore build attestation
-node bin/oath.mjs verify --signer &lt;ci&gt;,&lt;approver&gt; --quorum 2 --attest me/app --image ghcr.io/me/app:latest
-
-# mainnet
-node bin/oath.mjs verify --signer &lt;pubkey&gt; --network mainnet --image ghcr.io/me/app:latest</code></pre></div>
-        </div>
-
         <div role="tabpanel" id="panel-k8s" aria-labelledby="tab-k8s" class="tabpanel" tabindex="0" hidden>
-          <p class="muted" data-i18n="k8s_p">The webhook checks every new Pod, so kubectl apply cannot bypass the pipeline. It fails closed: if the registry, the RPC or the webhook is unreachable, new Pods are not admitted. Start with OATH_MODE=audit.</p>
+          <p class="muted" data-i18n="k8s_p">Checks every new Pod and fails closed. Start with mode=audit, then switch to enforce.</p>
           <div class="code-wrap"><button type="button" class="copy" data-copy="code-k8s" data-i18n="copy">Copy</button>
-<pre class="code-block" id="code-k8s"><code># installs the webhook into the namespace oath-system (generates TLS)
-OATH_SIGNER=&lt;public key&gt; OATH_NETWORK=devnet deploy/install.sh
+<pre class="code-block" id="code-k8s"><code>helm install oath oci://ghcr.io/tymofii-thc/charts/oath \
+  --version 0.2.0 -n oath-system --create-namespace \
+  --set signer=&lt;pubkey&gt; --set mode=audit</code></pre></div>
+        </div>
 
-# first rollout: allow everything, only warn
-OATH_MODE=audit OATH_SIGNER=&lt;public key&gt; deploy/install.sh
+        <div role="tabpanel" id="panel-cli" aria-labelledby="tab-cli" class="tabpanel" tabindex="0" hidden>
+          <p class="muted" data-i18n="cli_p">Exit codes: 0 verified, 1 not verified, 2 error.</p>
+          <div class="code-wrap"><button type="button" class="copy" data-copy="code-cli" data-i18n="copy">Copy</button>
+<pre class="code-block" id="code-cli"><code># once: create and fund the CI key
+npx --yes --allow-git=all github:Tymofii-thc/oath init
 
-# a Pod from an image the pipeline did not build:
-kubectl run t --image=nginx
-# → denied: no pipeline build anchored by the trusted signer(s)
-
-# private registries
-OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'</code></pre></div>
+# check an image
+npx --yes --allow-git=all github:Tymofii-thc/oath verify --signer &lt;pubkey&gt; --image ghcr.io/me/app:latest</code></pre></div>
         </div>
       </div>
-    </div>
-  </section>
-
-  <section class="section" id="records" aria-labelledby="rec-h">
-    <div class="wrap">
-      <div class="head-row">
-        <div>
-          <h2 id="rec-h" data-i18n="rec_h">Signer records</h2>
-          <p class="lead" data-i18n="rec_p">Pipeline records anchored by the signer above, newest first.</p>
-        </div>
-        <button type="button" class="btn ghost" id="b-records" data-i18n="rec_load">Load records</button>
-      </div>
-      <p id="rec-status" class="muted small" role="status" aria-live="polite"></p>
-      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="rec-h">
-        <table id="rec-table">
-          <thead>
-            <tr>
-              <th scope="col" data-i18n="c_time">Time</th>
-              <th scope="col" data-i18n="c_commit">Commit</th>
-              <th scope="col" data-i18n="c_image">Image</th>
-              <th scope="col" data-i18n="c_digest">Digest</th>
-              <th scope="col" data-i18n="c_tx">Transaction</th>
-            </tr>
-          </thead>
-          <tbody id="rec-body"></tbody>
-        </table>
-      </div>
+      <p class="links-row">
+        <a class="link-u" href="https://github.com/Tymofii-thc/oath#readme" rel="noopener" data-i18n="int_more">All options in the README →</a>
+        <a class="link-u" href="approve.html" data-keep-lang="approve.html" data-i18n="int_approve">Need a second signer? Approve with your wallet →</a>
+      </p>
     </div>
   </section>
 
   <section class="section" id="threats" aria-labelledby="thr-h">
     <div class="wrap">
       <h2 id="thr-h" data-i18n="thr_h">Threat model</h2>
-      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="thr-h">
+      <div class="table-wrap threat" tabindex="0" role="region" aria-labelledby="thr-h">
         <table>
           <thead>
             <tr>
-              <th scope="col" data-i18n="t_scn">Scenario</th>
+              <th scope="col" data-i18n="t_scn">Attack</th>
               <th scope="col" data-i18n="t_res">Result</th>
-              <th scope="col" data-i18n="t_why">Why</th>
+              <th scope="col" data-i18n="t_why">How</th>
             </tr>
           </thead>
           <tbody>
-            <tr><th scope="row" data-i18n="r1_s">Image swapped in the registry under the same tag</th><td><span class="tag blocked" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r1_w">The pulled digest has no record from a trusted signer.</td></tr>
-            <tr><th scope="row" data-i18n="r2_s">Manual docker push or kubectl apply, bypassing CI</th><td><span class="tag blocked" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r2_w">oath verify exits with 1; the admission webhook denies the Pod.</td></tr>
-            <tr><th scope="row" data-i18n="r3_s">Registry token leaked, CI signing key safe</th><td><span class="tag blocked" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r3_w">The attacker can push an image but cannot anchor its digest.</td></tr>
-            <tr><th scope="row" data-i18n="r4_s">Record anchored for a different image name</th><td><span class="tag blocked" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r4_w">Records are bound to the image name (disable with --no-bind).</td></tr>
-            <tr><th scope="row" data-i18n="r5_s">Old but legitimate digest replayed</th><td><span class="tag limited" data-i18n="tag_limited">Limited</span></td><td data-i18n="r5_w">Use --max-age to reject old records; without it the digest passes.</td></tr>
-            <tr><th scope="row" data-i18n="r6_s">CI key compromised, then revoked</th><td><span class="tag limited" data-i18n="tag_mitigated">Mitigated</span></td><td data-i18n="r6_w">Remove the key from the signer list: its records stop counting at once. Records anchored before you noticed are not detected.</td></tr>
-            <tr><th scope="row" data-i18n="r7_s">Registry, RPC or webhook unreachable</th><td><span class="tag neutral" data-i18n="tag_closed">Fail closed</span></td><td data-i18n="r7_w">New Pods are not admitted, running Pods are untouched. The CLI exits with 2.</td></tr>
-            <tr><th scope="row" data-i18n="r8_s">Forged record: a transaction that only mentions the signer's address</th><td><span class="tag blocked" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r8_w">A record counts only if the signer actually signed the transaction.</td></tr>
-            <tr><th scope="row" data-i18n="r9_s">Image of a running Pod edited, or a debug container added</th><td><span class="tag blocked" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r9_w">The webhook checks updates and ephemeral containers, not only new Pods.</td></tr>
+            <tr><th scope="row" data-i18n="r1_s">Image swapped under the same tag</th><td><span class="pill ok" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r1_w">The new digest has no record.</td></tr>
+            <tr><th scope="row" data-i18n="r2_s">Push or kubectl apply that bypasses CI</th><td><span class="pill ok" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r2_w">oath verify exits 1; the webhook denies the Pod.</td></tr>
+            <tr><th scope="row" data-i18n="r3_s">Registry token leaked</th><td><span class="pill ok" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r3_w">The attacker can push an image but cannot record its digest.</td></tr>
+            <tr><th scope="row" data-i18n="r4_s">Record made for a different image name</th><td><span class="pill ok" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r4_w">Records are bound to the image name.</td></tr>
+            <tr><th scope="row" data-i18n="r5_s">Old, valid digest replayed</th><td><span class="pill warn" data-i18n="tag_limited">Limited</span></td><td data-i18n="r5_w">Limit it with --max-age or oath revoke.</td></tr>
+            <tr><th scope="row" data-i18n="r6_s">CI key compromised, then revoked</th><td><span class="pill warn" data-i18n="tag_mitigated">Mitigated</span></td><td data-i18n="r6_w">Remove it from the signer list: its records stop counting at once.</td></tr>
+            <tr><th scope="row" data-i18n="r7_s">Registry, RPC or webhook down</th><td><span class="pill neutral" data-i18n="tag_closed">Fail closed</span></td><td data-i18n="r7_w">New Pods are refused, running Pods are untouched. The CLI exits 2.</td></tr>
+            <tr><th scope="row" data-i18n="r8_s">Forged record that only mentions the signer</th><td><span class="pill ok" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r8_w">Only transactions the signer actually signed count.</td></tr>
+            <tr><th scope="row" data-i18n="r9_s">Running Pod's image edited, or debug container added</th><td><span class="pill ok" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r9_w">The webhook checks updates and ephemeral containers too.</td></tr>
           </tbody>
         </table>
       </div>
@@ -239,12 +256,13 @@ OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'</code></pre
       <div class="notcovered">
         <h3 data-i18n="nc_h">Not covered</h3>
         <ul>
-          <li><strong data-i18n="nc1_h">Stolen CI signing key.</strong> <span data-i18n="nc1_p">Whoever holds SOLANA_SECRET_KEY can anchor a forged digest. Rotation, revocation, --max-age and image binding limit the damage. Hardware keys and keyless signing are planned, not implemented.</span></li>
-          <li><strong data-i18n="nc2_h">Malicious code built honestly.</strong> <span data-i18n="nc2_p">The chain proves that the signer recorded a digest at a given time, not that the build was honest or safe. That needs SLSA build attestations. The optional Trivy scan only checks fixable CRITICAL vulnerabilities.</span></li>
-          <li><strong data-i18n="nc3_h">Mainnet in CI.</strong> <span data-i18n="nc3_p">Mainnet is supported, but CI has not been run on live mainnet yet. devnet is the default and has no retention guarantees.</span></li>
-          <li><strong data-i18n="nc4_h">Availability and existing Pods.</strong> <span data-i18n="nc4_p">Registry or RPC outages block new Pods. Pods created before the webhook was installed are not checked; use oath verify --container for them.</span></li>
+          <li><strong data-i18n="nc1_h">Stolen CI signing key.</strong> <span data-i18n="nc1_p">Whoever holds it can record a forged digest. --quorum 2 adds a second approver key but is off by default. Rotation, revocation and --max-age limit the damage. The approve page is tested with Phantom only.</span></li>
+          <li><strong data-i18n="nc2_h">Malicious code built honestly.</strong> <span data-i18n="nc2_p">The chain proves the signer recorded a digest, not that the code is safe. --attest checks which workflow built the image, not what is in it.</span></li>
+          <li><strong data-i18n="nc3_h">Mainnet in CI.</strong> <span data-i18n="nc3_p">Supported, but CI has not run on live mainnet. devnet is the default and has no retention guarantee.</span></li>
+          <li><strong data-i18n="nc4_h">Availability and existing Pods.</strong> <span data-i18n="nc4_p">An RPC or registry outage blocks new Pods (images verified in the last hour still pass). Pods created before install need oath audit.</span></li>
         </ul>
       </div>
+      <p class="links-row"><a class="link-u" href="https://github.com/Tymofii-thc/oath/blob/main/THREAT-MODEL.md" rel="noopener" data-i18n="thr_more">Full threat model →</a></p>
     </div>
   </section>
 

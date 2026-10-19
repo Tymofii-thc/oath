@@ -4,74 +4,84 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>oath. approve - second signature with your wallet</title>
+<title>oath. approve — second signature with your wallet</title>
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="style.css">
-<style>
-  .approve-grid { display: grid; gap: 24px; grid-template-columns: 1fr; max-width: 760px; }
-  .warn { border: 1px solid #b08800; border-radius: 10px; padding: 12px 16px; color: var(--muted); }
-  .addr { overflow-wrap: anywhere; }
-  #out { min-height: 6rem; }
-</style>
 <script src="assets/vendor/solana-web3.min.js"></script>
 <script src="approve.js" defer></script>
 </head>
 <body>
+<a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+
 <header class="site-header">
   <div class="wrap bar">
-    <a class="brand" href="./" aria-label="oath, back to the main page">oath.</a>
-    <nav class="bar-right" aria-label="Site"><a class="link" href="./">Verifier</a><a class="link" href="https://github.com/Tymofii-thc/oath">GitHub</a></nav>
+    <a class="brand" href="./" aria-label="oath, back to the main page" data-i18n-attr="aria-label:brand_back">
+      <svg viewBox="67 -1490 4406 1514" aria-hidden="true" focusable="false"><path d="M573 24C875 24 1078 -201 1078 -526C1078 -853 875 -1080 573 -1080C271 -1080 67 -853 67 -526C67 -201 271 24 573 24ZM573 -158C392 -158 281 -301 281 -526C281 -753 393 -898 573 -898C753 -898 865 -753 865 -526C865 -302 754 -158 573 -158Z"/><path d="M1647 17C1829 17 1915 -65 1959 -150H1963V0H2171V-724C2171 -939 2012 -1077 1752 -1077C1488 -1077 1317 -935 1307 -734H1514C1522 -831 1614 -904 1749 -904C1883 -904 1962 -830 1962 -728V-719C1962 -642 1896 -644 1698 -620C1483 -595 1281 -543 1281 -302C1281 -91 1437 17 1647 17ZM1690 -153C1567 -153 1491 -207 1491 -298C1491 -405 1595 -446 1710 -463C1822 -479 1934 -496 1963 -519V-395C1963 -265 1876 -153 1690 -153Z"/><path d="M2978 -1056H2764V-1344H2552V-1056H2366V-882H2552V-252C2552 -82 2647 0 2845 0H2978V-174H2875C2791 -174 2764 -201 2764 -279V-882H2978Z"/><path d="M3416 -608C3416 -804 3527 -888 3671 -888C3817 -888 3902 -801 3902 -632V0H4113V-658C4113 -934 3948 -1077 3731 -1077C3594 -1077 3488 -1019 3416 -904V-1490H3205V0H3416Z"/><circle cx="4348.0" cy="-117.0" r="125.0"/></svg>
+    </a>
+    <nav class="bar-right" aria-label="Site" data-i18n-attr="aria-label:nav_label">
+      <a class="link" href="./" data-keep-lang="./" data-i18n="nav_verify">Verify</a>
+      <a class="link" href="https://github.com/Tymofii-thc/oath" rel="noopener">GitHub</a>
+      <div class="lang" role="group" aria-label="Language" data-i18n-attr="aria-label:lang_label">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="uk" aria-pressed="false">UK</button>
+      </div>
+    </nav>
   </div>
 </header>
 
-<main class="wrap section">
-  <h1>Approve a build with your wallet</h1>
-  <p class="lead">A second, independent signature for the signer quorum (<code>--quorum 2</code>): a stolen CI key alone can no longer authorise an image. Your wallet signs one Memo transaction; this page never sees your private key. Wallets that use a Ledger (Phantom, Solflare) work the same way.</p>
+<main id="main" class="wrap">
+  <div class="page-head">
+    <h1 data-i18n="ap_h1">Approve a build or revoke a digest with your wallet</h1>
+    <p class="lead" data-i18n="ap_lead">Sign one Memo transaction as the second signer (--quorum 2). Your private key never leaves the wallet.</p>
+  </div>
 
-  <div class="approve-grid">
-    <div class="warn" role="note">Before you approve, compare the digest with the one printed by the CI run of the build you are approving. Approving a digest you did not check defeats the purpose.</div>
+  <div class="stack">
+    <p class="warn-note" role="note" data-i18n="ap_warn">Compare the digest with the CI log of the build you approve. An unchecked approval defeats the purpose.</p>
 
     <form id="aform" class="panel" novalidate autocomplete="off">
-      <div class="field">
-        <label for="a-mode">Action</label>
-        <select id="a-mode"><option value="approve">Approve a build</option><option value="revoke">Revoke a digest</option></select>
+      <div class="wallet-row">
+        <button type="button" class="btn" id="a-connect" data-i18n="ap_connect">Connect wallet</button>
+        <span id="a-wallet" class="small muted mono addr" data-i18n="ap_not_connected">not connected</span>
       </div>
       <div class="field">
-        <label for="a-net">Network</label>
+        <label for="a-mode" data-i18n="ap_mode">Action</label>
+        <select id="a-mode"><option value="approve" data-i18n="ap_mode_approve">Approve a build</option><option value="revoke" data-i18n="ap_mode_revoke">Revoke a digest</option></select>
+      </div>
+      <div class="field">
+        <label for="a-net" data-i18n="ap_net">Network</label>
         <select id="a-net"><option value="devnet">devnet</option><option value="mainnet">mainnet</option></select>
       </div>
       <div class="field" id="f-image">
-        <label for="a-image">Image name</label>
+        <label for="a-image" data-i18n="ap_image">Image name</label>
         <input id="a-image" class="mono" type="text" spellcheck="false" placeholder="ghcr.io/owner/app" autocomplete="off">
       </div>
       <div class="field" id="f-commit">
-        <label for="a-commit">Commit</label>
-        <input id="a-commit" class="mono" type="text" spellcheck="false" placeholder="3f9a1c0d2b7e (first 12 characters are used)" autocomplete="off">
+        <label for="a-commit" data-i18n="ap_commit">Commit</label>
+        <input id="a-commit" class="mono" type="text" spellcheck="false" placeholder="3f9a1c0d2b7e" autocomplete="off">
       </div>
       <div class="field">
-        <label for="a-digest">Image digest</label>
+        <label for="a-digest" data-i18n="ap_digest">Image digest</label>
         <input id="a-digest" class="mono" type="text" spellcheck="false" placeholder="sha256:…" autocomplete="off">
       </div>
       <div class="field" id="f-reason" hidden>
-        <label for="a-reason">Reason</label>
-        <input id="a-reason" type="text" maxlength="100" placeholder="why this digest is bad" autocomplete="off">
+        <label for="a-reason" data-i18n="ap_reason">Reason</label>
+        <input id="a-reason" type="text" maxlength="100" autocomplete="off" data-i18n-attr="placeholder:ap_reason_ph" placeholder="why this digest is bad">
       </div>
       <p id="a-err" class="err" hidden role="alert"></p>
-      <p class="small muted">Memo that will be signed:</p>
-      <pre class="code-block mono addr" id="a-preview"></pre>
-      <div class="presets">
-        <button type="button" class="btn ghost" id="a-connect">Connect wallet</button>
-        <span id="a-wallet" class="small muted addr">not connected</span>
-      </div>
-      <button type="submit" class="btn primary wide" id="a-sign" disabled>Sign with wallet</button>
+      <p class="label-s" id="prev-l" data-i18n="ap_preview_l">Memo to sign</p>
+      <pre class="code-block mono addr" id="a-preview" aria-labelledby="prev-l"></pre>
+      <button type="submit" class="btn primary wide" id="a-sign" disabled data-i18n="ap_sign">Sign with wallet</button>
     </form>
 
     <div class="term" id="a-term" role="status" aria-live="polite">
-      <div class="term-bar"><span class="small muted">result</span></div>
-      <div class="term-body" id="out"><span class="dim">Connect a wallet, check the memo above, then sign.</span></div>
+      <div class="term-bar"><span data-i18n="ap_result">result</span></div>
+      <div class="term-body" id="out"><span class="dim" data-i18n="ap_idle">Connect a wallet, check the memo, then sign.</span></div>
     </div>
   </div>
 </main>
-<noscript><p class="wrap noscript">This page needs JavaScript to talk to your wallet.</p></noscript>
+<noscript><p class="noscript">This page needs JavaScript to talk to your wallet. / Цій сторінці потрібен JavaScript, щоб працювати з гаманцем.</p></noscript>
 </body>
 </html>
