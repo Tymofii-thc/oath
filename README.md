@@ -135,6 +135,10 @@ SOLANA_SECRET_KEY="$(cat .oath/ci-key.json)" demo/demo.sh     # needs docker and
 ```
 Expect `VERIFIED` with exit code 0, then `NOT VERIFIED` with exit code 1. The same two checks are one click each in the [live verifier](https://tymofii-thc.github.io/oath/).
 
+## More
+- [THREAT-MODEL.md](THREAT-MODEL.md): attacks, what happens, what is not covered, and what a security review of the code found and fixed (including a forgery hole, reproduced and closed).
+- The webhook checks `UPDATE` too (editing a running Pod's image, `kubectl debug`), exposes Prometheus metrics at `/metrics`, and has optional `OATH_ALLOWED_REGISTRIES` (comma-separated registries it may contact) and `OATH_LIMIT` (transactions scanned per signer).
+
 ## Limitations (we say them before you ask)
 - **CI key.** Whoever steals `SOLANA_SECRET_KEY` can record a forged digest. A quorum with an independent approver key closes this, but it needs a human in the loop and a separately stored key; without a quorum you only get mitigations (rotation, revocation, `--max-age`, image binding). Hardware keys and Ledger signing are **not implemented**.
 - **Honesty of the build.** A Solana record only proves "the signer recorded this digest". `--attest` verifies the SLSA build attestation (Sigstore) and proves that the named repository's workflow built the digest, but not that the code itself is safe (the optional Trivy gate covers known vulnerabilities).

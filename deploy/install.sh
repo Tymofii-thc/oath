@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs the oath admission webhook into the current kubectl context.
-# Usage: OATH_SIGNER=<pubkey[,pubkey]> [OATH_NETWORK=devnet|mainnet] [OATH_IMAGE=…] [OATH_FAILURE_POLICY=Fail|Ignore] [OATH_QUORUM=2] [OATH_ATTEST_REPO=owner/repo] [OATH_MODE=enforce|audit] [OATH_AUDIT_SCHEDULE="*/30 * * * *"] [OATH_STALE_OK_HOURS=1] [OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'] deploy/install.sh
+# Usage: OATH_SIGNER=<pubkey[,pubkey]> [OATH_NETWORK=devnet|mainnet] [OATH_IMAGE=…] [OATH_FAILURE_POLICY=Fail|Ignore] [OATH_QUORUM=2] [OATH_ATTEST_REPO=owner/repo] [OATH_MODE=enforce|audit] [OATH_AUDIT_SCHEDULE="*/30 * * * *"] [OATH_STALE_OK_HOURS=1] [OATH_LIMIT=1000] [OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'] deploy/install.sh
 # Fail (default): if the webhook is unreachable, new pods are rejected. Ignore: they are admitted unchecked (use with `oath audit`).
 set -euo pipefail
 : "${OATH_SIGNER:?set OATH_SIGNER to the CI signer public key (comma-separate several)}"
@@ -8,6 +8,7 @@ OATH_NETWORK="${OATH_NETWORK:-devnet}"
 OATH_FAILURE_POLICY="${OATH_FAILURE_POLICY:-Fail}"
 OATH_QUORUM="${OATH_QUORUM:-1}"
 OATH_STALE_OK_HOURS="${OATH_STALE_OK_HOURS:-1}"
+OATH_LIMIT="${OATH_LIMIT:-1000}"
 OATH_MODE="${OATH_MODE:-enforce}"
 case "$OATH_MODE" in enforce|audit) ;; *) echo "OATH_MODE must be enforce or audit" >&2; exit 2;; esac
 OATH_ATTEST_REPO="${OATH_ATTEST_REPO:-}"
@@ -31,7 +32,7 @@ if [ -n "${OATH_REGISTRY_AUTH:-}" ]; then
 fi
 
 ca="$(base64 -w0 < "$tmp/ca.crt")"
-sed -e "s|__OATH_IMAGE__|$OATH_IMAGE|" -e "s|__OATH_SIGNER__|$OATH_SIGNER|" -e "s|__OATH_NETWORK__|$OATH_NETWORK|" -e "s|__FAILURE_POLICY__|$OATH_FAILURE_POLICY|" -e "s|__OATH_MODE__|$OATH_MODE|" -e "s|__OATH_QUORUM__|$OATH_QUORUM|" -e "s|__OATH_STALE_OK_HOURS__|$OATH_STALE_OK_HOURS|" -e "s|__OATH_ATTEST_REPO__|$OATH_ATTEST_REPO|" -e "s|__CA_BUNDLE__|$ca|" "$here/k8s/oath.yaml" | kubectl apply -f -
+sed -e "s|__OATH_IMAGE__|$OATH_IMAGE|" -e "s|__OATH_SIGNER__|$OATH_SIGNER|" -e "s|__OATH_NETWORK__|$OATH_NETWORK|" -e "s|__FAILURE_POLICY__|$OATH_FAILURE_POLICY|" -e "s|__OATH_MODE__|$OATH_MODE|" -e "s|__OATH_QUORUM__|$OATH_QUORUM|" -e "s|__OATH_STALE_OK_HOURS__|$OATH_STALE_OK_HOURS|" -e "s|__OATH_LIMIT__|$OATH_LIMIT|" -e "s|__OATH_ATTEST_REPO__|$OATH_ATTEST_REPO|" -e "s|__CA_BUNDLE__|$ca|" "$here/k8s/oath.yaml" | kubectl apply -f -
 kubectl -n "$ns" rollout status deploy/oath-webhook --timeout=120s
 # Optional: periodic audit of Pods that were already running before the webhook (cron expression, e.g. "*/30 * * * *")
 if [ -n "${OATH_AUDIT_SCHEDULE:-}" ]; then

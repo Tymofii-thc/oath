@@ -34,6 +34,7 @@ spec:
               valueFrom: { secretKeyRef: { name: oath-registry-auth, key: auth, optional: true } }
             - { name: OATH_STALE_OK_HOURS, value: "__OATH_STALE_OK_HOURS__" }  # RPC outage: admit digests verified within the last N hours (0 = strictly fail closed)
             - { name: OATH_PIN, value: "true" }                    # rewrite tag -> verified digest
+            - { name: OATH_LIMIT, value: "__OATH_LIMIT__" }          # transactions scanned per signer (spam on the signer address can push old records out of the window)
             - { name: OATH_QUORUM, value: "__OATH_QUORUM__" }      # distinct signers that must have anchored the digest (2 = CI key + approver key)
             - { name: OATH_ATTEST_REPO, value: "__OATH_ATTEST_REPO__" }  # owner/repo whose GitHub Actions must have signed a build attestation (empty = not required)
           ports: [{ containerPort: 8443 }]

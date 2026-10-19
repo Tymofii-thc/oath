@@ -154,3 +154,11 @@ test("UPDATE: a new ephemeral container (kubectl debug) is checked", async () =>
   const r = await mk()({ request: { uid: "u", kind: { kind: "Pod" }, operation: "UPDATE", oldObject: base, object: withDebug } });
   assert.equal(r.response.allowed, false);
 });
+
+test("concurrent pods with the same image share one lookup", async () => {
+  let lookups = 0;
+  const h = makeHandler({ signers: ["S"], rpcUrl: "x", deps: { ...deps, findRecord: async ({ digest }) => { lookups++; await new Promise((r) => setTimeout(r, 30)); return anchored.has(digest) ? { signature: "s" } : null; } } });
+  const rs = await Promise.all(Array.from({ length: 50 }, () => h(pod(["ghcr.io/me/app:v1"]))));
+  assert.ok(rs.every((r) => r.response.allowed));
+  assert.equal(lookups, 1);
+});

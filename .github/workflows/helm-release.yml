@@ -1,0 +1,26 @@
+name: helm-release
+
+# Publishes the Helm chart as an OCI artifact: helm install oath oci://ghcr.io/tymofii-thc/charts/oath --version <v> ...
+on:
+  workflow_dispatch:
+  push:
+    tags: ["chart-v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Package and push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "$GH_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm lint deploy/helm/oath --set signer=X
+          helm package deploy/helm/oath -d out
+          helm push out/oath-*.tgz "oci://ghcr.io/${owner}/charts"
