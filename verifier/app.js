@@ -331,6 +331,12 @@
     }
   }
 
+  async function verifyRest(net, results) {
+    const out = [];
+    for (const r of results) for (const rec of r.rest || []) if (await signedByRetry(net, r.key, rec.sig)) out.push(rec);
+    return out;
+  }
+
   async function fetchSigner(net, key, digest) {
     const sigs = await rpcCall(net, 'getSignaturesForAddress', [key, { limit: SIG_LIMIT }]);
     if (!Array.isArray(sigs)) throw new Error('unexpected RPC response');
@@ -343,11 +349,12 @@
         records.push({ ...r, signer: key, sig: String(s.signature || ''), blockTime: Number(s.blockTime) || 0 });
       }
     }
-    const candidates = [...records.filter((r) => r.digest === digest), ...records.filter((r) => r.digest !== digest)].slice(0, SIGNED_CHECK_MAX);
-    const verified = [];
-    for (const r of candidates) if (await signedByRetry(net, key, r.sig)) verified.push(r);
-    verified.sort((x, y) => y.blockTime - x.blockTime);
-    return { key, total: sigs.length, okTx, records: verified };
+    // Verdict first: only the records for the digest being checked need the signature check, and those go in parallel.
+    const mine = records.filter((r) => r.digest === digest).slice(0, 5);
+    const flags = await Promise.all(mine.map((r) => signedByRetry(net, key, r.sig)));
+    const verified = mine.filter((_, i) => flags[i]);
+    const rest = records.filter((r) => r.digest !== digest).slice(0, SIGNED_CHECK_MAX); // for the table, checked afterwards
+    return { key, total: sigs.length, okTx, records: verified, rest };
   }
 
   async function collect(net, keys, digest) {
@@ -628,6 +635,13 @@
       };
     }
     renderTerminal(true);
+
+    // the table gets the other records once their signatures are checked (does not delay the verdict)
+    verifyRest(v.net, res.ok).then((extra) => {
+      if (seq !== state.seq || !extra.length) return;
+      state.records = { ...state.records, rows: sortedRecords([{ records: [...rows, ...extra] }]) };
+      renderRecords();
+    }).catch(() => {});
   }
 
   async function loadRecords() {
@@ -640,7 +654,11 @@
     const res = await collect(v.net, v.keys, v.digest);
     if (seq !== state.seq) return;
     if (res.ok.length === 0) state.records = { net: v.net, rows: [], status: 'error', msg: res.firstError ? res.firstError.message : 'unknown error' };
-    else state.records = { net: v.net, rows: sortedRecords(res.ok), status: 'ready' };
+    else {
+      const extra = await verifyRest(v.net, res.ok).catch(() => []);
+      if (seq !== state.seq) return;
+      state.records = { net: v.net, rows: sortedRecords([{ records: [...res.ok.flatMap((r) => r.records), ...extra] }]), status: 'ready' };
+    }
     renderRecords();
   }
 
