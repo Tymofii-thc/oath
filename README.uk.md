@@ -7,7 +7,9 @@
 
 [English](README.md) · **Українська**
 
-*Proof of Deploy: не деплой того, чого не збирав пайплайн.*
+*Не деплой того, чого не збирав пайплайн.*
+
+> Версія, подана на хакатон, має тег [`hackathon-submission`](https://github.com/Tymofii-thc/oath/tree/hackathon-submission). У `main` є пізніші виправлення безпеки (див. [THREAT-MODEL.md](THREAT-MODEL.md)).
 
 Інструмент, який не дає запустити в проді образ, що не збирав ваш пайплайн.
 

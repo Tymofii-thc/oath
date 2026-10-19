@@ -9,6 +9,8 @@
 
 *Don't deploy what the pipeline didn't build.*
 
+> The version submitted to the hackathon is tagged [`hackathon-submission`](https://github.com/Tymofii-thc/oath/tree/hackathon-submission). `main` contains later security fixes (see [THREAT-MODEL.md](THREAT-MODEL.md)).
+
 Oath stops a container image from reaching production unless your own pipeline built it. Live verifier: **https://tymofii-thc.github.io/oath/**
 
 **Problem.** A swapped image in the registry, a manual `docker push` that bypasses CI, a compromised token: nobody notices that production runs something other than what was built. That is a supply-chain attack, and the code in git can be perfectly clean.
