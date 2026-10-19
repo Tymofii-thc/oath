@@ -230,6 +230,8 @@ OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'</code></pre
             <tr><th scope="row" data-i18n="r5_s">Old but legitimate digest replayed</th><td><span class="tag limited" data-i18n="tag_limited">Limited</span></td><td data-i18n="r5_w">Use --max-age to reject old records; without it the digest passes.</td></tr>
             <tr><th scope="row" data-i18n="r6_s">CI key compromised, then revoked</th><td><span class="tag limited" data-i18n="tag_mitigated">Mitigated</span></td><td data-i18n="r6_w">Remove the key from the signer list: its records stop counting at once. Records anchored before you noticed are not detected.</td></tr>
             <tr><th scope="row" data-i18n="r7_s">Registry, RPC or webhook unreachable</th><td><span class="tag neutral" data-i18n="tag_closed">Fail closed</span></td><td data-i18n="r7_w">New Pods are not admitted, running Pods are untouched. The CLI exits with 2.</td></tr>
+            <tr><th scope="row" data-i18n="r8_s">Forged record: a transaction that only mentions the signer's address</th><td><span class="tag blocked" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r8_w">A record counts only if the signer actually signed the transaction.</td></tr>
+            <tr><th scope="row" data-i18n="r9_s">Image of a running Pod edited, or a debug container added</th><td><span class="tag blocked" data-i18n="tag_blocked">Blocked</span></td><td data-i18n="r9_w">The webhook checks updates and ephemeral containers, not only new Pods.</td></tr>
           </tbody>
         </table>
       </div>
@@ -254,7 +256,9 @@ OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'</code></pre
     <span class="dot-sep" aria-hidden="true">·</span>
     <a class="link" href="https://github.com/Tymofii-thc/oath" rel="noopener">GitHub</a>
     <span class="dot-sep" aria-hidden="true">·</span>
-    <a class="link" href="https://github.com/Tymofii-thc/oath" rel="noopener" data-i18n="license">MIT license</a>
+    <a class="link" href="https://github.com/Tymofii-thc/oath/blob/main/THREAT-MODEL.md" rel="noopener" data-i18n="tm">Threat model</a>
+    <span class="dot-sep" aria-hidden="true">·</span>
+    <a class="link" href="https://github.com/Tymofii-thc/oath/blob/main/LICENSE" rel="noopener" data-i18n="license">MIT license</a>
   </div>
 </footer>
 
