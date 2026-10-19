@@ -128,6 +128,7 @@ async function verify() {
     console.log(`  anchored at ${rec.anchoredAt} by ${rec.signers.join(" + ")}${quorum > 1 ? `  (quorum ${rec.signers.length}/${quorum} met)` : ""}`);
     console.log(`  tx ${rec.signature}`);
     if (att) console.log(`  build attestation OK: Sigstore-signed by ${att.workflow}`);
+    if (quorum <= 1) console.error("  note: single-signer verification — whoever holds this signer's key alone can anchor a forged digest; see --quorum in README.");
     process.exit(0);
   }
 
@@ -287,6 +288,13 @@ async function init() {
   console.log("         with:");
   console.log("           signer: ${{ vars.OATH_SIGNER }}");
   console.log("           image: ghcr.io/${{ github.repository }}:latest");
+  console.log("\nRecommended: close the single-key hole");
+  console.log("  Right now, whoever has SOLANA_SECRET_KEY can anchor a forged digest. Create a second, independent");
+  console.log("  approver key — kept OUTSIDE CI, e.g. on your own machine, never as a repository secret:");
+  console.log(`    node bin/oath.mjs init --out .oath/approver-key.json`);
+  console.log("  Then require both: --signer <ciKey>,<approverKey> --quorum 2 (or OATH_QUORUM=2 for the webhook).");
+  console.log("  The approver signs each build with their own key (scripts/anchor.mjs) or from a browser wallet");
+  console.log("  (verifier/approve.html) — a stolen CI key alone is then not enough. See README: Signer quorum.");
   process.exit(funded ? 0 : 1);
 }
 

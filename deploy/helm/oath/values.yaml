@@ -1,6 +1,7 @@
 # Required: public key(s) of the CI signer (comma-separate for rotation)
 signer: ""
 network: devnet            # devnet | mainnet
+rpc: ""                    # overrides the network default (comma-separate for failover), e.g. against public-RPC rate limits
 image: ghcr.io/tymofii-thc/oath-webhook:latest
 mode: enforce              # enforce | audit
 failurePolicy: Fail        # Fail | Ignore

@@ -4,3 +4,4 @@ node_modules/
 
 # private notes, never committed
 CLAUDE.md
+.oath/

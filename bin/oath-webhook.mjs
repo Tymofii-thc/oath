@@ -18,6 +18,11 @@ import { makeHandler } from "../lib/admission.mjs";
 const signers = (process.env.OATH_SIGNER || "").split(",").map((s) => s.trim()).filter(Boolean);
 if (!signers.length) { console.error("OATH_SIGNER is required"); process.exit(2); }
 
+const quorumEnv = Number(process.env.OATH_QUORUM || 1);
+if (quorumEnv <= 1) {
+  console.warn("oath: OATH_QUORUM is 1 — a single stolen CI key is enough to admit a forged image. Consider OATH_QUORUM=2 with an independent approver key kept outside CI (see README: Signer quorum).");
+}
+
 const handler = makeHandler({
   signers,
   rpcUrl: resolveRpc({}),

@@ -29,6 +29,7 @@ spec:
           env:
             - { name: OATH_SIGNER, value: "__OATH_SIGNER__" }      # comma-separated: list old + new key during rotation
             - { name: OATH_NETWORK, value: "__OATH_NETWORK__" }    # devnet | mainnet
+            - { name: SOLANA_RPC, value: "__SOLANA_RPC__" }        # overrides the network default (comma-separate for failover); empty = use OATH_NETWORK's default
             - { name: OATH_MODE, value: "__OATH_MODE__" }          # enforce, or audit = allow but warn
             - name: OATH_REGISTRY_AUTH                             # private registries, from the Secret that install.sh creates when OATH_REGISTRY_AUTH is set
               valueFrom: { secretKeyRef: { name: oath-registry-auth, key: auth, optional: true } }

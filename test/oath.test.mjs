@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { findRecord, parseMemo, repoName, resolveRpc } from "../lib/oath.mjs";
+import { findRecord, parseMemo, repoName, resolveRpc, rpcCall } from "../lib/oath.mjs";
 
 const D1 = "sha256:" + "a".repeat(64);
 const D2 = "sha256:" + "b".repeat(64);
@@ -175,4 +175,39 @@ test("forged record does not count towards a quorum", async () => {
   const m = await mockRpc({ A: [tx(1, memo("a/b", D1))], B: [tx(2, memo("a/b", D1), { forged: true })] });
   assert.equal(await findRecord({ signers: ["A", "B"], digest: D1, rpcUrl: m.url, quorum: 2 }), null);
   m.close();
+});
+
+// ---- RPC retry on rate limiting (public devnet/mainnet endpoints 429 often; CI must not treat that as "not verified")
+test("a 429 is retried on the same endpoint before giving up", async () => {
+  let hits = 0;
+  const server = http.createServer((req, res) => {
+    hits++;
+    if (hits < 3) { res.statusCode = 429; res.end("rate limited"); return; }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      const { id } = JSON.parse(body);
+      res.end(JSON.stringify({ jsonrpc: "2.0", id, result: "ok" }));
+    });
+  });
+  await new Promise((r) => server.listen(0, r));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  try {
+    assert.equal(await rpcCall(url, "getHealth", []), "ok");
+    assert.equal(hits, 3, "two 429s then a success, all against the same endpoint");
+  } finally { server.close(); }
+});
+
+test("429s that never clear eventually throw (fail closed, not silently verified)", async () => {
+  const server = http.createServer((_req, res) => { res.statusCode = 429; res.end("rate limited"); });
+  await new Promise((r) => server.listen(0, r));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const prev = process.env.OATH_RPC_RETRIES;
+  process.env.OATH_RPC_RETRIES = "1"; // keep this test fast; the retry count itself is exercised above
+  try {
+    await assert.rejects(() => rpcCall(url, "getHealth", []), /429/);
+  } finally {
+    server.close();
+    if (prev === undefined) delete process.env.OATH_RPC_RETRIES; else process.env.OATH_RPC_RETRIES = prev;
+  }
 });

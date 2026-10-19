@@ -25,7 +25,9 @@ jobs:
           docker run --rm -v "$PWD/deploy/helm:/c" alpine/helm:3.16.2 template t /c/oath --set signer=X --set auditSchedule='*/30 * * * *' >/dev/null
 
   e2e-kind:
-    # Uses the public Solana devnet RPC (rate-limited): a failure here can be a throttled RPC, so read the log before suspecting the code.
+    # Uses the Solana devnet RPC (rate-limited on the public endpoint): the RPC client retries 429s with backoff, and
+    # SOLANA_RPC can point this at a private endpoint (repo variable, optional) to make the job less dependent on the
+    # public endpoint's mood; unset, it falls back to the public devnet default exactly as before.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -35,13 +37,17 @@ jobs:
           chmod +x kind && sudo mv kind /usr/local/bin/kind
       - name: E2E
         # alpine is anchored on devnet by the project's CI key under this digest; nginx:alpine never was.
+        env:
+          SOLANA_RPC: ${{ vars.SOLANA_RPC }}
         run: OATH_SIGNER=5D4W8x8UeqW3qVi9uzNzvJPWiJZQaRWVR9ru2ckFhoih OK_IMAGE=alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc BAD_IMAGE=nginx:alpine test/e2e-kind.sh
 
   live-devnet:
-    # The forgery regression against the real devnet (public RPC: a failure can be throttling, read the log).
+    # The forgery regression against the real devnet. Same SOLANA_RPC override as e2e-kind; 429s are retried with backoff either way.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22 }
-      - run: node test/live-devnet.mjs
+      - env:
+          SOLANA_RPC: ${{ vars.SOLANA_RPC }}
+        run: node test/live-devnet.mjs
