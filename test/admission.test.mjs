@@ -162,3 +162,19 @@ test("concurrent pods with the same image share one lookup", async () => {
   assert.ok(rs.every((r) => r.response.allowed));
   assert.equal(lookups, 1);
 });
+
+test("a slow lookup is answered with a clear denial before the API server's timeout, and still fills the cache", async () => {
+  let done = 0;
+  const slow = { ...deps, findRecord: async ({ digest }) => { await new Promise((r) => setTimeout(r, 120)); done++; return anchored.has(digest) ? { signature: "s" } : null; } };
+  const h = makeHandler({ signers: ["S"], rpcUrl: "x", deadlineMs: 40, deps: slow });
+  const r1 = await h(pod(["ghcr.io/me/app:v1"]));
+  assert.equal(r1.response.allowed, false);
+  assert.match(r1.response.status.message, /took longer than/);
+  await new Promise((r) => setTimeout(r, 150)); // the lookup finished in the background
+  const r2 = await h(pod(["ghcr.io/me/app:v1"]));
+  assert.equal(r2.response.allowed, true);
+  assert.equal(done, 1, "the second request was served from the cache");
+  const audit = await makeHandler({ signers: ["S"], rpcUrl: "x", deadlineMs: 40, mode: "audit", deps: slow })(pod(["ghcr.io/me/evil:latest"]));
+  assert.equal(audit.response.allowed, true);
+  assert.ok(audit.response.warnings[0].includes("took longer"));
+});

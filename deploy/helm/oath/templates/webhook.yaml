@@ -10,6 +10,16 @@ data:
   ca.crt: {{ $tls.ca }}
   tls.crt: {{ $tls.crt }}
   tls.key: {{ $tls.key }}
+{{- if and .Values.rpc (not .Values.rpcSecret) }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oath-rpc
+  namespace: {{ .Release.Namespace }}
+stringData:
+  rpc: {{ .Values.rpc | quote }}
+{{- end }}
 {{- if .Values.registryAuth }}
 ---
 apiVersion: v1
@@ -35,6 +45,7 @@ spec:
       labels: { app: oath-webhook }
       annotations:
         checksum/tls: {{ $tls.crt | sha256sum }}
+        checksum/rpc: {{ .Values.rpc | sha256sum }}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -46,7 +57,10 @@ spec:
           env:
             - { name: OATH_SIGNER, value: {{ .Values.signer | quote }} }
             - { name: OATH_NETWORK, value: {{ .Values.network | quote }} }
-            - { name: SOLANA_RPC, value: {{ .Values.rpc | quote }} }
+            {{- if or .Values.rpc .Values.rpcSecret }}
+            - name: SOLANA_RPC
+              valueFrom: { secretKeyRef: { name: {{ default "oath-rpc" .Values.rpcSecret }}, key: rpc } }
+            {{- end }}
             - { name: OATH_MODE, value: {{ .Values.mode | quote }} }
             - { name: OATH_STALE_OK_HOURS, value: {{ .Values.staleOkHours | quote }} }
             - { name: OATH_PIN, value: "true" }

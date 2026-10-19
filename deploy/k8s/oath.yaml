@@ -18,6 +18,8 @@ spec:
   template:
     metadata:
       labels: { app: oath-webhook }
+      annotations:
+        oath.io/rpc-checksum: "__RPC_SUM__"       # changes with SOLANA_RPC so the Pods restart and pick up the new Secret value
     spec:
       securityContext:
         runAsNonRoot: true
@@ -29,7 +31,8 @@ spec:
           env:
             - { name: OATH_SIGNER, value: "__OATH_SIGNER__" }      # comma-separated: list old + new key during rotation
             - { name: OATH_NETWORK, value: "__OATH_NETWORK__" }    # devnet | mainnet
-            - { name: SOLANA_RPC, value: "__SOLANA_RPC__" }        # overrides the network default (comma-separate for failover); empty = use OATH_NETWORK's default
+            - name: SOLANA_RPC                                     # overrides the network default (comma-separate for failover). From a Secret: RPC URLs often carry an API key
+              valueFrom: { secretKeyRef: { name: oath-rpc, key: rpc, optional: true } }
             - { name: OATH_MODE, value: "__OATH_MODE__" }          # enforce, or audit = allow but warn
             - name: OATH_REGISTRY_AUTH                             # private registries, from the Secret that install.sh creates when OATH_REGISTRY_AUTH is set
               valueFrom: { secretKeyRef: { name: oath-registry-auth, key: auth, optional: true } }

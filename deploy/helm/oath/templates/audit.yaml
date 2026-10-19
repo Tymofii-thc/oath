@@ -47,8 +47,11 @@ spec:
               image: {{ .Values.image | quote }}
               imagePullPolicy: IfNotPresent
               args: ["bin/oath.mjs", "audit", "--in-cluster", "--signer", {{ .Values.signer | quote }}, "--network", {{ .Values.network | quote }}, "--quorum", {{ .Values.quorum | quote }}]
+              {{- if or .Values.rpc .Values.rpcSecret }}
               env:
-                - { name: SOLANA_RPC, value: {{ .Values.rpc | quote }} }
+                - name: SOLANA_RPC
+                  valueFrom: { secretKeyRef: { name: {{ default "oath-rpc" .Values.rpcSecret }}, key: rpc } }
+              {{- end }}
               resources:
                 requests: { cpu: 20m, memory: 64Mi }
                 limits: { memory: 256Mi }

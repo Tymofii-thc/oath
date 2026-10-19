@@ -211,3 +211,29 @@ test("429s that never clear eventually throw (fail closed, not silently verified
     if (prev === undefined) delete process.env.OATH_RPC_RETRIES; else process.env.OATH_RPC_RETRIES = prev;
   }
 });
+
+test("a 429 on the first of several endpoints fails over at once, without backing off on it", async () => {
+  let first = 0;
+  const limited = http.createServer((_q, res) => { first++; res.statusCode = 429; res.end(); });
+  const good = http.createServer((req, res) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "ok" }))); });
+  await Promise.all([limited, good].map((s) => new Promise((r) => s.listen(0, r))));
+  const url = `http://127.0.0.1:${limited.address().port},http://127.0.0.1:${good.address().port}`;
+  try {
+    const t0 = Date.now();
+    assert.equal(await rpcCall(url, "getHealth", []), "ok");
+    assert.equal(first, 1, "the rate-limited endpoint was asked once");
+    assert.ok(Date.now() - t0 < 250, "no backoff sleep happened");
+  } finally { limited.close(); good.close(); }
+});
+
+test("when every endpoint is rate limited, a backed-off second round can succeed", async () => {
+  let hits = 0;
+  const a = http.createServer((_q, res) => { hits++; res.statusCode = 429; res.end(); });
+  let bHits = 0;
+  const b = http.createServer((req, res) => { bHits++; if (bHits < 2) { res.statusCode = 429; res.end(); return; } let x = ""; req.on("data", (c) => (x += c)); req.on("end", () => res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "ok" }))); });
+  await Promise.all([a, b].map((s) => new Promise((r) => s.listen(0, r))));
+  try {
+    assert.equal(await rpcCall(`http://127.0.0.1:${a.address().port},http://127.0.0.1:${b.address().port}`, "getHealth", []), "ok");
+    assert.equal(hits, 2); assert.equal(bHits, 2);
+  } finally { a.close(); b.close(); }
+});

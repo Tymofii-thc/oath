@@ -128,7 +128,7 @@ async function verify() {
     console.log(`  anchored at ${rec.anchoredAt} by ${rec.signers.join(" + ")}${quorum > 1 ? `  (quorum ${rec.signers.length}/${quorum} met)` : ""}`);
     console.log(`  tx ${rec.signature}`);
     if (att) console.log(`  build attestation OK: Sigstore-signed by ${att.workflow}`);
-    if (quorum <= 1) console.error("  note: single-signer verification — whoever holds this signer's key alone can anchor a forged digest; see --quorum in README.");
+    if (quorum <= 1 && process.stderr.isTTY && !process.env.OATH_QUIET) console.error("  note: single-signer verification — whoever holds this signer's key alone can anchor a forged digest; see --quorum in README.");
     process.exit(0);
   }
 

@@ -50,7 +50,8 @@ spec:
               imagePullPolicy: IfNotPresent
               args: ["bin/oath.mjs", "audit", "--in-cluster", "--signer", "__OATH_SIGNER__", "--network", "__OATH_NETWORK__", "--quorum", "__OATH_QUORUM__"]
               env:
-                - { name: SOLANA_RPC, value: "__SOLANA_RPC__" }    # overrides the network default (comma-separate for failover); empty = use --network's default
+                - name: SOLANA_RPC                                 # overrides the network default (comma-separate for failover); from the Secret install.sh creates
+                  valueFrom: { secretKeyRef: { name: oath-rpc, key: rpc, optional: true } }
               resources:
                 requests: { cpu: 20m, memory: 64Mi }
                 limits: { memory: 256Mi }

@@ -1,7 +1,8 @@
 # Required: public key(s) of the CI signer (comma-separate for rotation)
 signer: ""
 network: devnet            # devnet | mainnet
-rpc: ""                    # overrides the network default (comma-separate for failover), e.g. against public-RPC rate limits
+rpc: ""                    # overrides the network default (comma-separate for failover); stored in a Secret because RPC URLs often carry an API key
+rpcSecret: ""              # or name an existing Secret holding the URL under the key "rpc" (then `rpc` is not needed)
 image: ghcr.io/tymofii-thc/oath-webhook:latest
 mode: enforce              # enforce | audit
 failurePolicy: Fail        # Fail | Ignore
