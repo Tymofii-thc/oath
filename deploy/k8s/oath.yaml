@@ -91,8 +91,8 @@ webhooks:
     rules:
       - apiGroups: [""]
         apiVersions: ["v1"]
-        operations: ["CREATE"]
-        resources: ["pods"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods", "pods/ephemeralcontainers"]
     clientConfig:
       service: { name: oath-webhook, namespace: oath-system, path: /validate }
       caBundle: __CA_BUNDLE__

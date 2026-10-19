@@ -65,3 +65,27 @@ test("basic-auth registry: credentials accepted, absence rejected", async () => 
 test("a pinned digest never touches the network", async () => {
   assert.equal(await resolveDigest(`example.invalid/a/b@${DIGEST}`), DIGEST);
 });
+
+test("credentials are never sent to a token host outside the registry's own domain", async () => {
+  const seen = [];
+  const evil = http.createServer((req, res) => { seen.push(req.headers.authorization || ""); res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ token: "t" })); });
+  await new Promise((r) => evil.listen(0, r));
+  const reg = http.createServer((req, res) => {
+    res.statusCode = 401;
+    res.setHeader("www-authenticate", `Bearer realm="http://localhost:${evil.address().port}/token",service="s"`);
+    res.end();
+  });
+  await new Promise((r) => reg.listen(0, r));
+  const host = `127.0.0.1:${reg.address().port}`;
+  try {
+    await assert.rejects(() => resolveDigest(`${host}/a/b:1`, { auths: { [host]: { username: "u", password: "SECRET" } } }));
+    assert.ok(seen.length >= 1, "token host was contacted");
+    assert.ok(seen.every((h) => h === ""), "no Authorization header leaked");
+  } finally { evil.close(); reg.close(); }
+});
+
+test("OATH_ALLOWED_REGISTRIES blocks lookups on other hosts (no outbound request)", async () => {
+  process.env.OATH_ALLOWED_REGISTRIES = "ghcr.io";
+  try { await assert.rejects(() => resolveDigest("169.254.169.254/x/y:1"), /not in OATH_ALLOWED_REGISTRIES/); }
+  finally { delete process.env.OATH_ALLOWED_REGISTRIES; }
+});

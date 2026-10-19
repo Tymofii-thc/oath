@@ -133,3 +133,24 @@ test("a stale verification expires: after staleMs the pod is denied again", asyn
   await new Promise((r) => setTimeout(r, 40)); down = true;
   assert.equal((await h(pod(["ghcr.io/me/app:v1"]))).response.allowed, false);
 });
+
+test("UPDATE: swapping the image of a running Pod is checked; unchanged images are not", async () => {
+  const mkpod = (image, extra = {}) => ({ spec: { containers: [{ name: "c0", image }] }, ...extra });
+  const h = mk();
+  // image edited to an un-anchored one: denied
+  const bad = await h({ request: { uid: "u", kind: { kind: "Pod" }, operation: "UPDATE", oldObject: mkpod(`ghcr.io/me/app@${D1}`), object: mkpod("ghcr.io/me/evil:latest") } });
+  assert.equal(bad.response.allowed, false);
+  // metadata-only update: images are the same, nothing is looked up, admitted
+  const same = await h({ request: { uid: "u", kind: { kind: "Pod" }, operation: "UPDATE", oldObject: mkpod("ghcr.io/me/evil:latest"), object: mkpod("ghcr.io/me/evil:latest") } });
+  assert.equal(same.response.allowed, true);
+  // image edited to an anchored one: admitted
+  const good = await h({ request: { uid: "u", kind: { kind: "Pod" }, operation: "UPDATE", oldObject: mkpod(`ghcr.io/me/app@${D1}`), object: mkpod("ghcr.io/me/app:v1") } });
+  assert.equal(good.response.allowed, true);
+});
+
+test("UPDATE: a new ephemeral container (kubectl debug) is checked", async () => {
+  const base = { spec: { containers: [{ name: "c0", image: `ghcr.io/me/app@${D1}` }] } };
+  const withDebug = { spec: { ...base.spec, ephemeralContainers: [{ name: "dbg", image: "ghcr.io/me/evil:latest" }] } };
+  const r = await mk()({ request: { uid: "u", kind: { kind: "Pod" }, operation: "UPDATE", oldObject: base, object: withDebug } });
+  assert.equal(r.response.allowed, false);
+});

@@ -314,7 +314,24 @@
     return out;
   }
 
-  async function fetchSigner(net, key) {
+  /* getSignaturesForAddress also lists transactions that merely mention the address (anyone can add it as a read-only
+     account next to a memo they signed themselves), so a record counts only if the signer really signed the transaction. */
+  async function signedBy(net, key, sig) {
+    const t = await rpcCall(net, 'getTransaction', [sig, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }]);
+    const keys = (t && t.transaction && t.transaction.message && t.transaction.message.accountKeys) || [];
+    return !!t && !(t.meta && t.meta.err) && keys.some((k) => k.pubkey === key && k.signer === true);
+  }
+
+  const SIGNED_CHECK_MAX = 8;  // records that get the signature check (public RPCs rate-limit); the digest being verified goes first
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function signedByRetry(net, key, sig) {
+    for (let i = 0; ; i++) {
+      try { return await signedBy(net, key, sig); }
+      catch (e) { if (i >= 4 || !/429|rate|limit/i.test(String(e && e.message))) throw e; await sleep(2000 * (i + 1)); }
+    }
+  }
+
+  async function fetchSigner(net, key, digest) {
     const sigs = await rpcCall(net, 'getSignaturesForAddress', [key, { limit: SIG_LIMIT }]);
     if (!Array.isArray(sigs)) throw new Error('unexpected RPC response');
     const records = [];
@@ -326,11 +343,15 @@
         records.push({ ...r, signer: key, sig: String(s.signature || ''), blockTime: Number(s.blockTime) || 0 });
       }
     }
-    return { key, total: sigs.length, okTx, records };
+    const candidates = [...records.filter((r) => r.digest === digest), ...records.filter((r) => r.digest !== digest)].slice(0, SIGNED_CHECK_MAX);
+    const verified = [];
+    for (const r of candidates) if (await signedByRetry(net, key, r.sig)) verified.push(r);
+    verified.sort((x, y) => y.blockTime - x.blockTime);
+    return { key, total: sigs.length, okTx, records: verified };
   }
 
-  async function collect(net, keys) {
-    const settled = await Promise.allSettled(keys.map((k) => fetchSigner(net, k)));
+  async function collect(net, keys, digest) {
+    const settled = await Promise.allSettled(keys.map((k) => fetchSigner(net, k, digest)));
     const ok = [];
     let firstError = null;
     for (const s of settled) {
@@ -580,7 +601,7 @@
 
     let res;
     try {
-      res = await collect(v.net, v.keys);
+      res = await collect(v.net, v.keys, v.digest);
     } catch (e) {
       res = { ok: [], firstError: e };
     }
@@ -616,7 +637,7 @@
     const seq = ++state.seq;
     state.records = { net: v.net, rows: [], status: 'loading' };
     renderRecords();
-    const res = await collect(v.net, v.keys);
+    const res = await collect(v.net, v.keys, v.digest);
     if (seq !== state.seq) return;
     if (res.ok.length === 0) state.records = { net: v.net, rows: [], status: 'error', msg: res.firstError ? res.firstError.message : 'unknown error' };
     else state.records = { net: v.net, rows: sortedRecords(res.ok), status: 'ready' };

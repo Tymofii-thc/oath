@@ -20,6 +20,11 @@ kubectl create deploy evil --image="$BAD_IMAGE" >/dev/null 2>&1; sleep 8
 msg=$(kubectl get rs -l app=evil -o jsonpath='{.items[0].status.conditions[*].message}' 2>/dev/null)
 case "$msg" in *"refusing to admit"*) check "deployment pods blocked" ok ok;; *) check "deployment pods blocked" ok "none";; esac
 
+# a bare Pod's image can be edited in place; ephemeral containers (kubectl debug) can be added: both must be checked too
+kubectl patch pod ok -p "{\"spec\":{\"containers\":[{\"name\":\"ok\",\"image\":\"$BAD_IMAGE\"}]}}" >/dev/null 2>&1; check "in-place image swap on a running pod denied" 1 $?
+kubectl debug ok --image="$BAD_IMAGE" --target=ok -- sleep 1 >/dev/null 2>&1; check "ephemeral container with un-anchored image denied" 1 $?
+kubectl label pod ok touched=yes >/dev/null 2>&1; check "metadata-only update of a running pod still works" 0 $?
+
 kubectl -n oath-system scale deploy/oath-webhook --replicas=0 >/dev/null 2>&1
 kubectl -n oath-system wait --for=delete pod -l app=oath-webhook --timeout=60s >/dev/null 2>&1
 kubectl run down --image="$BAD_IMAGE" --restart=Never >/dev/null 2>&1; check "webhook down => fail closed (denied)" 1 $?

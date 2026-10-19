@@ -15,11 +15,18 @@ function mockRpc(txs) {
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       const { method, params, id } = JSON.parse(body);
+      res.setHeader("content-type", "application/json");
+      if (method === "getTransaction") {
+        // the first signer whose list holds this signature; tx.forged = the address is only mentioned, not a signer
+        const owner = Object.keys(txs).find((a) => txs[a].some((t) => t.signature === params[0]));
+        const t = owner && txs[owner].find((x) => x.signature === params[0]);
+        res.end(JSON.stringify({ jsonrpc: "2.0", id, result: t ? { meta: { err: null }, transaction: { message: { accountKeys: [{ pubkey: owner, signer: !t.forged }, { pubkey: "ATTACKER", signer: !!t.forged }] } } } : null }));
+        return;
+      }
       calls.push(params);
       const [addr, opts] = params;
       let list = txs[addr] || [];
       if (opts.before) list = list.slice(list.findIndex((t) => t.signature === opts.before) + 1);
-      res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ jsonrpc: "2.0", id, result: list.slice(0, opts.limit) }));
     });
   });
@@ -150,4 +157,22 @@ test("RPC failover: a dead first endpoint does not stop verification", async () 
     assert.ok(r);
     await assert.rejects(() => findRecord({ signers: ["S"], digest: D1, rpcUrl: "http://127.0.0.1:1,http://127.0.0.1:2" }), "all endpoints dead still throws (fail closed)");
   } finally { m.close(); }
+});
+
+test("a record in a tx the signer did not sign (address only mentioned) is ignored", async () => {
+  const m = await mockRpc({ S: [tx(1, memo("a/b", D1), { forged: true })] });
+  assert.equal(await findRecord({ signers: ["S"], digest: D1, rpcUrl: m.url }), null);
+  m.close();
+});
+
+test("a forged revocation (signer did not sign it) does not revoke", async () => {
+  const m = await mockRpc({ S: [tx(1, rev(D1, "troll"), { forged: true }), tx(2, memo("a/b", D1))] });
+  assert.ok(await findRecord({ signers: ["S"], digest: D1, rpcUrl: m.url }));
+  m.close();
+});
+
+test("forged record does not count towards a quorum", async () => {
+  const m = await mockRpc({ A: [tx(1, memo("a/b", D1))], B: [tx(2, memo("a/b", D1), { forged: true })] });
+  assert.equal(await findRecord({ signers: ["A", "B"], digest: D1, rpcUrl: m.url, quorum: 2 }), null);
+  m.close();
 });
