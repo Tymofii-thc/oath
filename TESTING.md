@@ -70,7 +70,7 @@ Needs docker, kind and kubectl. Expect six `PASS` lines and `ALL PASSED` (admit,
 - Mainnet is supported in code but has not been run in CI.
 - Hardware-wallet signing is not implemented.
 - `--attest` for **private** repositories is untested.
-- `oath init --set-github` was checked with a real GitHub CLI (secret and variable set in a throwaway private repo). `--attest` for private repositories is untested: build attestations for private repos need a GitHub plan that supports them, and Sigstore's private instance has a different trust root.
+- `oath init --set-github` was checked with a real GitHub CLI (secret and variable set in a throwaway private repo). `--attest` does not work for private repositories on a personal account: GitHub refuses to store build attestations there ("Feature not available for user-owned private repositories", confirmed by a real run), so there is nothing to verify. Organization/Enterprise private repos are untested.
 - The kubelet needs its own `imagePullSecrets` for private images; oath only needs `OATH_REGISTRY_AUTH` to read their digests.
 - Only the author has run this so far. You are the first outside tester.
 
