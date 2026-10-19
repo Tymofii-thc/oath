@@ -14,7 +14,10 @@ OATH_SIGNER=$OATH_SIGNER OATH_IMAGE=oath:e2e "$root/deploy/install.sh" >/dev/nul
 
 kubectl run ok --image="$OK_IMAGE" --restart=Never -- sleep 30 >/dev/null 2>&1; check "anchored image admitted" 0 $?
 img=$(kubectl get pod ok -o jsonpath='{.spec.containers[0].image}' 2>/dev/null)
-case "$img" in *@sha256:*) check "tag pinned to digest" ok ok;; *) check "tag pinned to digest" ok "$img";; esac
+case "$OK_IMAGE" in
+  *@sha256:*) echo "SKIP  tag pinned to digest (OK_IMAGE is already a digest; covered by unit tests)";;
+  *) case "$img" in *@sha256:*) check "tag pinned to digest" ok ok;; *) check "tag pinned to digest" ok "$img";; esac;;
+esac
 kubectl run bad --image="$BAD_IMAGE" --restart=Never >/dev/null 2>&1; check "un-anchored image denied" 1 $?
 kubectl create deploy evil --image="$BAD_IMAGE" >/dev/null 2>&1; sleep 8
 msg=$(kubectl get rs -l app=evil -o jsonpath='{.items[0].status.conditions[*].message}' 2>/dev/null)

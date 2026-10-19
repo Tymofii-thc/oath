@@ -1,0 +1,38 @@
+name: ci
+
+# Tests of oath itself: unit tests, Helm chart lint, and an end-to-end run of the admission webhook in a kind cluster.
+on:
+  push:
+    branches: [main, security-hardening]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22 }
+      - run: npm ci --omit=optional --ignore-scripts
+      - run: npm test
+      - name: Helm chart
+        run: |
+          docker run --rm -v "$PWD/deploy/helm:/c" alpine/helm:3.16.2 lint /c/oath --set signer=X
+          docker run --rm -v "$PWD/deploy/helm:/c" alpine/helm:3.16.2 template t /c/oath --set signer=X --set auditSchedule='*/30 * * * *' >/dev/null
+
+  e2e-kind:
+    # Uses the public Solana devnet RPC (rate-limited): a failure here can be a throttled RPC, so read the log before suspecting the code.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install kind
+        run: |
+          curl -fsSLo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.27.0/kind-linux-amd64
+          chmod +x kind && sudo mv kind /usr/local/bin/kind
+      - name: E2E
+        # alpine is anchored on devnet by the project's CI key under this digest; nginx:alpine never was.
+        run: OATH_SIGNER=5D4W8x8UeqW3qVi9uzNzvJPWiJZQaRWVR9ru2ckFhoih OK_IMAGE=alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc BAD_IMAGE=nginx:alpine test/e2e-kind.sh
