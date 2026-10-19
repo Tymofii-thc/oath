@@ -1,5 +1,5 @@
 # oath: CLI + admission webhook. Runtime deps: sigstore only (optional web3.js is needed just for anchoring in CI).
-FROM node:22-alpine
+FROM node:26-alpine
 WORKDIR /oath
 COPY package.json package-lock.json ./
 # npm itself is not needed at runtime: removing it also removes its bundled (and often outdated) dependencies from the image
