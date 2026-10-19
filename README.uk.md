@@ -104,7 +104,7 @@ oath verify --signer <ciKey>,<approverKey> --quorum 2 --image ghcr.io/me/app:lat
 
 ## Затвердження й відкликання з кошилька
 `verifier/approve.html` (на сайті: https://tymofii-thc.github.io/oath/approve.html) дозволяє людині-затверджувачу додати другий підпис кворуму або відкликати digest із браузерного кошилька (Phantom, Solflare; обидва працюють із Ledger). Сторінка будує одну Memo-транзакцію, показує, що саме підписується, і просить кошилька підписати; приватний ключ до сторінки не потрапляє. Перед затвердженням звір digest із логом CI.
-**Перевірено** на підставному кошильку з тим самим інтерфейсом (connect, signTransaction) на живому devnet: транзакцію сторінки прийнято, а `oath verify --quorum 2` пройшов. **Не перевірено** з реальними Phantom, Solflare чи Ledger.
+**Перевірено** зі справжнім Phantom (розширення браузера) на живому devnet: транзакцію сторінки підписав гаманець, її прийнято, а `oath verify --quorum 2` пройшов (і не пройшов з одним лише ключем CI). **Не перевірено** з Solflare чи Ledger.
 
 ## Мейннет
 Усе працює однаково: `--network mainnet` (CLI), `OATH_NETWORK=mainnet` (webhook), `?net=mainnet` або випадайка (сторінка), для запису в CI вхід `rpc` action'у (або змінна репозиторію `SOLANA_RPC`). Запис коштує приблизно 0,000005 SOL комісії. Сторінка-верифікатор для мейннету ходить у `solana-rpc.publicnode.com`, бо `api.mainnet-beta.solana.com` повертає 403 на всі браузерні запити (заголовок `Origin`); CLI й webhook це не зачіпає. Публічний RPC `api.mainnet-beta.solana.com` має ліміти, для продакшену візьми власний (Helius, QuickNode тощо) і передай через `--rpc` / `SOLANA_RPC`.
