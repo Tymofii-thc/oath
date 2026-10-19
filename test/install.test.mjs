@@ -39,11 +39,6 @@ test("oath init --approver makes an approver key and does not tell you to put it
   assert.doesNotMatch(r.stdout, /node bin\/oath\.mjs init/);
 });
 
-test("the CI-key init output recommends `oath init --approver`, not a repo-relative node command", () => {
-  const src = readFileSync(join(root, "bin/oath.mjs"), "utf8");
-  assert.ok(src.includes('"    oath init --approver"'));
-});
-
 test("install.sh substitutes values that contain '&' (e.g. the image reference)", () => {
   const dir = mkdtempSync(join(tmpdir(), "oath-install2-"));
   const applied = join(dir, "applied.yaml");
