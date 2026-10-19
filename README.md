@@ -98,6 +98,8 @@ It checks the cryptographic signature and the Sigstore transparency-log entry (v
 ## Signer quorum (recommended — closes the stolen-CI-key hole)
 The 3-step setup above has exactly one key: whoever holds `SOLANA_SECRET_KEY` can record a forged digest, full stop. That is the one attack in the [threat model](THREAT-MODEL.md) that isn't a mitigation away from working, so we recommend doing this next, not treating it as optional hardening. `oath init` prints it as the next step after setup. An image is then accepted only if **N different keys** each recorded its digest:
 ```bash
+# make the approver's key (kept OUTSIDE CI; it prints the public key and the next steps, and never asks you to add it to GitHub):
+oath init --approver
 # the CI key records automatically; a human approver records with their own key (laptop, separate device):
 SOLANA_SECRET_KEY="$(cat approver.json)" node scripts/anchor.mjs --image ghcr.io/me/app --digest sha256:… --commit <sha>
 # before deploy:

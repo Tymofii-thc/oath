@@ -34,11 +34,13 @@ if [ -n "${OATH_REGISTRY_AUTH:-}" ]; then
 fi
 
 ca="$(base64 -w0 < "$tmp/ca.crt")"
-sed -e "s|__OATH_IMAGE__|$OATH_IMAGE|" -e "s|__OATH_SIGNER__|$OATH_SIGNER|" -e "s|__OATH_NETWORK__|$OATH_NETWORK|" -e "s|__SOLANA_RPC__|$SOLANA_RPC|" -e "s|__FAILURE_POLICY__|$OATH_FAILURE_POLICY|" -e "s|__OATH_MODE__|$OATH_MODE|" -e "s|__OATH_QUORUM__|$OATH_QUORUM|" -e "s|__OATH_STALE_OK_HOURS__|$OATH_STALE_OK_HOURS|" -e "s|__OATH_LIMIT__|$OATH_LIMIT|" -e "s|__OATH_ATTEST_REPO__|$OATH_ATTEST_REPO|" -e "s|__CA_BUNDLE__|$ca|" "$here/k8s/oath.yaml" | kubectl apply -f -
+# values go into sed replacements: escape the characters that mean something there (a URL with ?a=1&b=2 would otherwise be mangled)
+esc() { printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'; }
+sed -e "s|__OATH_IMAGE__|$(esc "$OATH_IMAGE")|" -e "s|__OATH_SIGNER__|$(esc "$OATH_SIGNER")|" -e "s|__OATH_NETWORK__|$(esc "$OATH_NETWORK")|" -e "s|__SOLANA_RPC__|$(esc "$SOLANA_RPC")|" -e "s|__FAILURE_POLICY__|$(esc "$OATH_FAILURE_POLICY")|" -e "s|__OATH_MODE__|$(esc "$OATH_MODE")|" -e "s|__OATH_QUORUM__|$(esc "$OATH_QUORUM")|" -e "s|__OATH_STALE_OK_HOURS__|$(esc "$OATH_STALE_OK_HOURS")|" -e "s|__OATH_LIMIT__|$(esc "$OATH_LIMIT")|" -e "s|__OATH_ATTEST_REPO__|$(esc "$OATH_ATTEST_REPO")|" -e "s|__CA_BUNDLE__|$(esc "$ca")|" "$here/k8s/oath.yaml" | kubectl apply -f -
 kubectl -n "$ns" rollout status deploy/oath-webhook --timeout=120s
 # Optional: periodic audit of Pods that were already running before the webhook (cron expression, e.g. "*/30 * * * *")
 if [ -n "${OATH_AUDIT_SCHEDULE:-}" ]; then
-  sed -e "s|__OATH_IMAGE__|$OATH_IMAGE|" -e "s|__OATH_SIGNER__|$OATH_SIGNER|" -e "s|__OATH_NETWORK__|$OATH_NETWORK|" -e "s|__SOLANA_RPC__|$SOLANA_RPC|" -e "s|__OATH_QUORUM__|$OATH_QUORUM|" -e "s|__OATH_AUDIT_SCHEDULE__|$OATH_AUDIT_SCHEDULE|" "$here/k8s/audit-cronjob.yaml" | kubectl apply -f -
+  sed -e "s|__OATH_IMAGE__|$(esc "$OATH_IMAGE")|" -e "s|__OATH_SIGNER__|$(esc "$OATH_SIGNER")|" -e "s|__OATH_NETWORK__|$(esc "$OATH_NETWORK")|" -e "s|__SOLANA_RPC__|$(esc "$SOLANA_RPC")|" -e "s|__OATH_QUORUM__|$(esc "$OATH_QUORUM")|" -e "s|__OATH_AUDIT_SCHEDULE__|$(esc "$OATH_AUDIT_SCHEDULE")|" "$here/k8s/audit-cronjob.yaml" | kubectl apply -f -
   echo "Audit CronJob installed (schedule: $OATH_AUDIT_SCHEDULE). Failed jobs = unverified or revoked Pods: kubectl -n $ns get jobs"
 fi
 

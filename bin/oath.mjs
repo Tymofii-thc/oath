@@ -4,7 +4,7 @@
 //   oath verify --signer <pubkey[,pubkey…]> --digest sha256:<hex>
 //   oath verify --signer <pubkey> --image ghcr.io/me/app:latest      (digest read from local docker)
 //   oath verify --signer <pubkey> --container prod                   (digest of the RUNNING image)
-//   oath init   [--out .oath/ci-key.json] [--no-wait] [--set-github]      (create a CI key, fund it on devnet, print the next steps)
+//   oath init   [--out .oath/ci-key.json] [--approver] [--no-wait] [--set-github]      (create a CI key, fund it on devnet, print the next steps)
 //   oath revoke --digest sha256:<hex> --reason "<text>"   (SOLANA_SECRET_KEY or --key-file; a revoked digest never verifies again)
 //   oath audit  --signer <pubkey> [--file pods.json | --in-cluster] [--skip-namespaces a,b]   (every Pod running in the current kube context, or from inside a Pod)
 //
@@ -208,7 +208,8 @@ async function revoke() {
 
 // One-command setup: a CI key in a file (the secret is never printed), a funded devnet balance, and the exact next steps.
 async function init() {
-  const out = arg("out") || ".oath/ci-key.json";
+  const approver = flag("approver"); // a second, independent key for --quorum: never goes into CI secrets
+  const out = arg("out") || (approver ? ".oath/approver-key.json" : ".oath/ci-key.json");
   const network = arg("network") || "devnet";
   let web3;
   try { web3 = await import("@solana/web3.js"); } catch { fail(2, "oath init needs @solana/web3.js: run `npm install` in this repository first."); }
@@ -223,7 +224,7 @@ async function init() {
     kp = Keypair.generate();
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, JSON.stringify(Array.from(kp.secretKey)), { mode: 0o600 });
-    console.log(`Created a CI key in ${out} (permissions 600; keep it out of git and chat)`);
+    console.log(`Created ${approver ? "an approver" : "a CI"} key in ${out} (permissions 600; keep it out of git and chat)`);
     try { // keep the key out of git
       const gi = ".gitignore";
       const entry = dirname(out).split("/")[0] + "/";
@@ -232,7 +233,7 @@ async function init() {
     } catch { /* not fatal */ }
   }
   const pub = kp.publicKey.toBase58();
-  console.log(`\nPublic key (this is OATH_SIGNER, safe to share):\n  ${pub}\n`);
+  console.log(`\nPublic key (${approver ? "the approver's public key, safe to share" : "this is OATH_SIGNER, safe to share"}):\n  ${pub}\n`);
 
   const rpcUrl = resolveRpc({ rpc: arg("rpc"), network });
   const conn = new Connection(rpcUrl, { commitment: "confirmed", disableRetryOnRateLimit: true }); // fail fast: the public faucet is often rate-limited
@@ -258,6 +259,15 @@ async function init() {
       for (let i = 0; i < 120 && !funded; i++) { await sleep(5000); funded = (await bal()) >= 0.001; }
       console.log(funded ? "Funds received." : "Still no balance. Fund the key, then run `oath init` again.");
     }
+  }
+
+  if (approver) {
+    console.log("\nNext steps (approver key; do NOT add this key to GitHub secrets, that would defeat the quorum)");
+    console.log(`  1. Trust both keys:  --signer <ciKey>,${pub} --quorum 2   (webhook: OATH_SIGNER=<ciKey>,${pub} OATH_QUORUM=2)`);
+    console.log(`  2. Approve a build:  SOLANA_SECRET_KEY="$(cat ${out})" node scripts/anchor.mjs --image ghcr.io/me/app --digest sha256:… --commit <sha>`);
+    console.log("     or sign from a browser wallet instead (no key file needed): verifier/approve.html");
+    console.log("  3. Keep the key file off CI and off shared machines.");
+    process.exit(funded ? 0 : 1);
   }
 
   console.log("\nNext steps");
@@ -291,7 +301,7 @@ async function init() {
   console.log("\nRecommended: close the single-key hole");
   console.log("  Right now, whoever has SOLANA_SECRET_KEY can anchor a forged digest. Create a second, independent");
   console.log("  approver key — kept OUTSIDE CI, e.g. on your own machine, never as a repository secret:");
-  console.log(`    node bin/oath.mjs init --out .oath/approver-key.json`);
+  console.log("    oath init --approver");
   console.log("  Then require both: --signer <ciKey>,<approverKey> --quorum 2 (or OATH_QUORUM=2 for the webhook).");
   console.log("  The approver signs each build with their own key (scripts/anchor.mjs) or from a browser wallet");
   console.log("  (verifier/approve.html) — a stolen CI key alone is then not enough. See README: Signer quorum.");
@@ -308,6 +318,6 @@ if (cmd === "verify") {
 } else if (cmd === "revoke") {
   await revoke();
 } else {
-  console.error("Usage: oath revoke --digest sha256:… --reason <text> [--key-file <path>] [--network …]\n       oath init [--out .oath/ci-key.json] [--no-wait] [--set-github]\n       oath audit --signer <pubkey[,pubkey]> [--file pods.json|-] [--skip-namespaces a,b] [--network …]\n       oath verify --signer <pubkey[,pubkey]> (--digest sha256:… | --image <ref> | --container <name>) [--network devnet|mainnet | --rpc <url>] [--max-age <days>] [--quorum <N>] [--attest <owner/repo>] [--no-bind]");
+  console.error("Usage: oath revoke --digest sha256:… --reason <text> [--key-file <path>] [--network …]\n       oath init [--out .oath/ci-key.json] [--approver] [--no-wait] [--set-github]\n       oath audit --signer <pubkey[,pubkey]> [--file pods.json|-] [--skip-namespaces a,b] [--network …]\n       oath verify --signer <pubkey[,pubkey]> (--digest sha256:… | --image <ref> | --container <name>) [--network devnet|mainnet | --rpc <url>] [--max-age <days>] [--quorum <N>] [--attest <owner/repo>] [--no-bind]");
   process.exit(2);
 }
