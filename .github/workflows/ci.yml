@@ -36,3 +36,12 @@ jobs:
       - name: E2E
         # alpine is anchored on devnet by the project's CI key under this digest; nginx:alpine never was.
         run: OATH_SIGNER=5D4W8x8UeqW3qVi9uzNzvJPWiJZQaRWVR9ru2ckFhoih OK_IMAGE=alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc BAD_IMAGE=nginx:alpine test/e2e-kind.sh
+
+  live-devnet:
+    # The forgery regression against the real devnet (public RPC: a failure can be throttling, read the log).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22 }
+      - run: node test/live-devnet.mjs
