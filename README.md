@@ -73,7 +73,7 @@ Exit codes: `0` verified, `1` not verified, `2` error (network, arguments). Opti
 
 Setup: `oath init`, then a variable group with `SOLANA_SECRET_KEY` (secret), `OATH_SIGNER` and `OATH_REGISTRY_AUTH` (secret, `{"<registry>.azurecr.io":{"username":"…","password":"…"}}`, host in lowercase). Azure does not pass secret variables to scripts by itself: map each one in `env`. For the ACR login use the admin user (username = registry name), or a repository token with read scope (username = token name), or a service principal with `AcrPull`.
 
-**What this protects, and what it does not.** There is no admission webhook for Azure Container Apps, so the gate is the `verify` step of your pipeline.
+**What this protects, and what it does not.** The `verify` step is voluntary: whoever controls the deployment can leave it out, and a pipeline that does not contain it deploys anything. It becomes mandatory only where the image runs (the Kubernetes webhook) or where deployment rights belong to your pipeline alone. There is no admission webhook for Azure Container Apps, so there the gate is the `verify` step plus those rights.
 - Stolen registry credentials: an attacker can push an image, but cannot record its digest, so the pipeline refuses to deploy it. A swapped tag is refused the same way.
 - The records live on Solana, outside Azure: someone who gets admin in Azure cannot rewrite what was recorded.
 - Someone who can edit your pipeline or read the `SOLANA_SECRET_KEY` variable can record anything: use `--quorum 2` with an approver key that is not in Azure DevOps (see below), and limit who can edit pipelines.
