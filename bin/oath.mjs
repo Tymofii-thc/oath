@@ -54,6 +54,13 @@ function pickRepoDigest(lines, ref) {
   return chosen ? { digest: extractDigest(chosen), repo: repoName(chosen) } : null;
 }
 
+const REPO_DIGESTS = "{{range .RepoDigests}}{{println .}}{{end}}";
+// repo@sha256:… entries of an image in local docker, or null
+function localDigest(image) {
+  try { return pickRepoDigest(execFileSync("docker", ["image", "inspect", "--format", REPO_DIGESTS, image], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(), image); }
+  catch { return null; }
+}
+
 const registryAuths = () => {
   if (!process.env.OATH_REGISTRY_AUTH) return {};
   try { return JSON.parse(process.env.OATH_REGISTRY_AUTH); } // the value itself is never printed: it holds a password
@@ -75,16 +82,16 @@ async function resolveTarget() {
     // repo@sha256:… already says which digest it is: no docker, no registry call
     const pinned = image.match(/@(sha256:[0-9a-f]{64})$/i);
     if (pinned) return { digest: pinned[1].toLowerCase(), repo: repoName(image) };
-    let local = null;
-    try { local = execFileSync("docker", ["image", "inspect", "--format", fmt, image], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(); } catch { /* no docker or not pulled: ask the registry */ }
-    if (local !== null) return pickRepoDigest(local, image) || { digest: null };
-    try {
-      const digest = await resolveDigest(image, { auths: registryAuths() });
-      console.error(`note: ${image} is not in local docker; the digest comes from the registry`);
-      return { digest, repo: repoName(image) };
-    } catch (e) {
-      fail(2, `cannot get the digest of ${image}: ${e.message}`);
+    // A tag means "whatever the registry serves now", which is what prod will pull: ask the registry first. A local docker copy
+    // proves little (in a CI job it is the image this very agent just built and pushed), so it is only a fallback, and a loud one.
+    let regErr;
+    try { return { digest: await resolveDigest(image, { auths: registryAuths() }), repo: repoName(image) }; } catch (e) { regErr = e; }
+    const local = localDigest(image);
+    if (local) {
+      console.error(`warning: could not ask the registry (${regErr.message}); using the local docker copy, which does not prove what ${image} points to now`);
+      return local;
     }
+    fail(2, `cannot get the digest of ${image}: ${regErr.message} (private registry: set OATH_REGISTRY_AUTH; or pass repo@sha256:…)`);
   }
   return { digest: null };
 }
@@ -222,20 +229,29 @@ async function anchor() {
   if (arg("digest")) { digest = extractDigest(arg("digest")); if (!digest) fail(2, "Bad --digest (expected sha256:<64 hex>)."); }
   else digest = extractDigest(image.match(/@sha256:[0-9a-fA-F]{64}$/)?.[0]);
   if (!digest) {
-    try { digest = await resolveDigest(image, { auths: registryAuths() }); }
-    catch (e) { fail(2, `cannot get the digest of ${image}: ${e.message} (pass --digest, or OATH_REGISTRY_AUTH for a private registry)`); }
+    // what this job just built and pushed is what must be recorded: take the digest from the local copy when there is one, because a tag
+    // can be moved in the registry between the push and now. Without docker the registry is asked.
+    const local = localDigest(image);
+    if (local) digest = local.digest;
+    else {
+      try { digest = await resolveDigest(image, { auths: registryAuths() }); }
+      catch (e) { fail(2, `cannot get the digest of ${image}: ${e.message} (pass --digest, or OATH_REGISTRY_AUTH for a private registry)`); }
+      console.error(`note: ${image} is not in local docker; the digest comes from the registry (it may have moved since your push)`);
+    }
   }
   let commit = arg("commit") || process.env.GITHUB_SHA || process.env.BUILD_SOURCEVERSION || process.env.CI_COMMIT_SHA || "";
   if (!commit) { try { commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { /* not a checkout */ } }
   commit = commit.trim().toLowerCase();
   if (!/^[0-9a-f]{7,40}$/.test(commit)) fail(2, "Missing --commit <sha> (or set GITHUB_SHA / BUILD_SOURCEVERSION / CI_COMMIT_SHA, or run inside a git checkout).");
+  const text = `pod1|${repoName(image)}|${commit.slice(0, 12)}|${digest}|${new Date().toISOString()}`;
+  if (flag("dry-run")) { console.log(`Would record: ${text}`); return; }
   const secretKey = readSecret();
   let rpcUrl;
   try { rpcUrl = resolveRpc({ rpc: arg("rpc"), network: arg("network") }); } catch (e) { fail(2, e.message); }
-  const text = `pod1|${repoName(image)}|${commit.slice(0, 12)}|${digest}|${new Date().toISOString()}`;
   try {
     const out = await sendMemo({ text, secretKey, rpcUrl });
     console.log(`Anchored: ${text}`);
+    console.log(`Digest  : ${digest}`);   // deploy this exact digest (repo@sha256:…), not the tag
     console.log(`Signer  : ${out.signer}`);
     console.log(`Tx      : ${out.signature}`);
   } catch (e) {
@@ -283,7 +299,7 @@ async function init() {
     console.log(`Created ${approver ? "an approver" : "a CI"} key: ${out}   (never printed; keep it out of git and chat)`);
     try { // keep the key out of git
       const gi = ".gitignore";
-      const entry = dirname(out).split("/")[0] + "/";
+      const entry = dirname(out) === "." ? out : dirname(out).split("/")[0] + "/";
       const cur = existsSync(gi) ? readFileSync(gi, "utf8") : "";
       if (!cur.split("\n").includes(entry)) appendFileSync(gi, (cur && !cur.endsWith("\n") ? "\n" : "") + entry + "\n");
     } catch { /* not fatal */ }
@@ -389,16 +405,17 @@ const HELP = {
       ...NETWORK]),
   anchor: help("oath anchor: record a built image on Solana. Run it in CI right after the build.",
     "oath anchor --image <ref> [--digest sha256:…] [--commit <sha>] [--key-file <file>]", [
-      ["--image <ref>", "image name, e.g. ghcr.io/me/app:latest (the digest is read from the registry)"],
+      ["--image <ref>", "image name, e.g. ghcr.io/me/app:latest (the digest of the local docker copy, else the registry's)"],
       ["--digest sha256:…", "use this digest instead of asking the registry"],
       ["--commit <sha>", "default: GITHUB_SHA, BUILD_SOURCEVERSION, CI_COMMIT_SHA, or the current git commit"],
+      ["--dry-run", "print the record that would be written and stop (no key needed)"],
       ["--key-file <file>", "the signing key; default: the SOLANA_SECRET_KEY environment variable"],
       ...NETWORK],
     ['Private registry: OATH_REGISTRY_AUTH=\'{"host":{"username":"u","password":"p"}}\'']),
   verify: help("oath verify: is this image one your pipeline built? Run it before deploy.",
     "oath verify --signer <pubkey> (--image <ref> | --digest sha256:… | --container <name>)", [
       ["--signer <key[,key]>", "public key(s) of the CI signer; several accept a key rotation (or OATH_SIGNER)"],
-      ["--image <ref>", "repo@sha256:… needs no docker; a tag is read from local docker, else from the registry"],
+      ["--image <ref>", "repo@sha256:… needs nothing else; a tag is looked up in the registry, with the local docker copy only as a fallback"],
       ["--digest sha256:…", "check a digest directly (the image name is not checked)"],
       ["--container <name>", "the image a running docker container uses"],
       ["--quorum <N>", "at least N different signers must have recorded it"],

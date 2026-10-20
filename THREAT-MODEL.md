@@ -7,14 +7,14 @@ That a container image running in your cluster (or about to be deployed) is **on
 
 ## Trust assumptions
 - The CI signing key (and, with `--quorum`, the approver keys) are not controlled by the attacker.
-- The Solana RPC you query tells the truth (use several endpoints with `--rpc a,b,c`, or your own node).
-- The webhook binary and its Kubernetes configuration are the ones you installed (the webhook image is itself built and recorded by this pipeline).
+- The Solana RPC you query tells the truth. `--rpc a,b,c` is failover for availability, not a cross-check: the first answer wins, and the transaction is not verified cryptographically, so a lying RPC could fabricate a record. Use your own node or a provider you trust.
+- The webhook binary and its Kubernetes configuration are the ones you installed (the webhook image is built by this pipeline, but nothing checks that at install time: pin it by digest with `OATH_IMAGE=ghcr.io/…@sha256:…`).
 
 ## Attacks and what happens
 
 | Attack | Result |
 |---|---|
-| Swap an image in the registry under the same tag | Denied: the tag resolves to a different digest that has no record (**tested**, kind + devnet) |
+| Swap an image in the registry under the same tag | Denied: the tag resolves to a different digest that has no record (**tested**, kind + devnet). In a pipeline this holds only if you verify and deploy the **same digest** (`repo@sha256:…`), not the tag: see `examples/` |
 | Manual `docker push`, bypassing CI | Denied: no record for that digest (**tested**) |
 | `kubectl apply` of an unrecorded image | Denied by the webhook, including Pods of Deployments/Jobs (**tested**) |
 | Edit the image of a running bare Pod, or `kubectl debug` with a foreign image | Denied: the webhook checks `UPDATE` and `pods/ephemeralcontainers` (**tested**) |
@@ -22,9 +22,9 @@ That a container image running in your cluster (or about to be deployed) is **on
 | Forge a record without the CI key: send a transaction that only *mentions* the CI address next to a Memo the attacker signed | Ignored: a record counts only if the signer actually signed the transaction (**tested live on devnet**; this was a real hole in earlier versions, see "Found in review") |
 | Steal the CI key and record a malicious digest | Passes with one key. With `--quorum 2` it also needs the approver's record (**tested** with real Phantom and Solflare). Revoke afterwards with `oath revoke` (**tested**) |
 | Honest build of malicious code (compromised dependency or developer) | Not stopped. Mitigations: `--attest` (proves *which workflow* built it), SBOM attestation, optional Trivy gate |
-| Spam the CI address with transactions to push old records out of the scanned window | Old digests stop verifying (availability). Raise `--limit` / `OATH_LIMIT`; the webhook keeps recent verifications for `OATH_STALE_OK_HOURS` |
-| Make the webhook contact arbitrary hosts via an image name (SSRF) | Limit with `OATH_ALLOWED_REGISTRIES`; registry credentials are never sent to a host outside the registry's own domain (**tested**) |
-| Take down the RPC or the webhook | Fails closed by default (new Pods are refused). Already running Pods are unaffected. Optional: stale-ok window or `failurePolicy: Ignore` |
+| Spam a signer's address with transactions to push records out of the scanned window | Old digests stop verifying (availability), and **a revocation made by a trusted key can be pushed out the same way, so a revoked digest verifies again** (reproduced with a mock RPC in the 2026-10-20 review; costs about a fee per transaction). Raise `--limit` / `OATH_LIMIT`. A structural fix (one deterministic account per signer and digest, so no scan) is not built yet |
+| Make the webhook contact arbitrary hosts via an image name (SSRF) | Anyone who can create a Pod can make the webhook send a HEAD/GET to a host of their choosing (the error text comes back in the denial). Set `OATH_ALLOWED_REGISTRIES` (`install.sh`, Helm `allowedRegistries`; **empty by default = any host**). Registry credentials are never sent to a host outside the registry's own domain (**tested**) |
+| Take down the RPC or the webhook | New Pods are refused (`failurePolicy: Fail`). Already running Pods are unaffected. **A stale-ok window of 1 hour is on by default** (`OATH_STALE_OK_HOURS`): during an RPC outage an image verified in the last hour is admitted, so a revocation made in that time is not seen. Set `OATH_STALE_OK_HOURS=0` for strict behaviour. `failurePolicy: Ignore` turns the webhook off when it is down |
 | Revoke-spam: forge revocations of good digests | Ignored for the same reason as forged records: a revocation must be signed by a trusted key |
 
 ## Not covered
@@ -33,9 +33,21 @@ That a container image running in your cluster (or about to be deployed) is **on
 - Namespaces exempt from the webhook (`kube-system`, `kube-public`, `kube-node-lease`, the webhook's own namespace, and any labelled `oath.io/exempt=true`). Anyone who can label a namespace can exempt it: restrict that permission.
 - An attacker with cluster-admin can delete the webhook configuration.
 - Revocation is seen by the webhook after its cache expires (up to 5 minutes).
+- A stolen CI key can also **revoke** any digest, including the one in production (revocation by any trusted signer is final): a denial-of-service on new Pods.
+- Rolling back to an old digest that was recorded and later turned out vulnerable. Limit it with `--max-age` (off by default) or revoke the digest.
+- The `commit` field in a record is a label: nothing checks that the image was built from that commit.
+- The webhook is a *mutating* webhook (it pins the tag to the digest) with `reinvocationPolicy: Never`. Another mutating webhook that runs after it can still change the Pod, and the verdict is not given by a separate *validating* webhook. Planned, not built.
+- Images mounted as volumes (`volumes[].image`, newer Kubernetes) are not checked. A verified image can still run with any command or privileges: oath does not restrict the Pod spec.
+- The webhook certificate lasts 825 days and is not rotated. When it expires, `failurePolicy: Fail` blocks new Pods in the whole cluster: re-run `install.sh` (it makes a new one and restarts the Pods) before that.
+- Removing the old key from the trusted list after a rotation makes every record that only it signed invalid: images that were recorded only by the old key cannot be re-scheduled until they are recorded again.
+- The browser verifier is a simplified check (no revocation, quorum, image-name binding, `--max-age` or attestation).
+- `--attest` accepts an attestation from **any workflow and any ref** of the named repository (it checks the repository's workflow-path prefix), so it shows "built by this repository's Actions", not "built by this workflow on `main`". Someone who can edit workflows in that repository can produce a valid attestation.
+- The `verify` step in a pipeline is voluntary: whoever controls the pipeline can remove it. Only the webhook, or deployment rights held by your pipeline alone, makes it mandatory.
 - Mainnet is supported but not exercised in CI; Ledger is untested (Phantom and Solflare are tested).
 
 ## Found in review
+A second, independent review (2026-10-20, another model, read-only, mock RPC) found: a tag swapped between verify and deploy in the Azure example because `verify --image <tag>` trusted the local docker copy (fixed: the registry is asked first, the examples deploy by digest); `anchor` could record a moved tag (fixed: the local copy is preferred); loopback detection by prefix (fixed); `OATH_ALLOWED_REGISTRIES` not settable from the installers (fixed); the browser verifier described as "the same check" (corrected); and the open items above. Each claim was checked against the code before being written here.
+
 A security review of the code (2026-10-19) found and fixed:
 1. **Forged records.** `getSignaturesForAddress` returns every transaction that mentions the address, not only those it signed. Anyone could add the CI address as a read-only account in a transaction carrying a Memo they signed themselves, and `oath verify` showed `VERIFIED`. Reproduced on devnet, then fixed in the CLI, the webhook and the browser verifier: the signer must be a real signer of the transaction.
 2. **Running Pods could be edited.** The webhook handled only `CREATE`; changing the image of a bare Pod in place bypassed it. It now also checks `UPDATE` and ephemeral containers.

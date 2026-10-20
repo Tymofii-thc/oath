@@ -89,3 +89,13 @@ test("OATH_ALLOWED_REGISTRIES blocks lookups on other hosts (no outbound request
   try { await assert.rejects(() => resolveDigest("169.254.169.254/x/y:1"), /not in OATH_ALLOWED_REGISTRIES/); }
   finally { delete process.env.OATH_ALLOWED_REGISTRIES; }
 });
+
+test("only real loopback names are fetched over plain http", async () => {
+  const seen = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => { seen.push(String(url)); return { ok: false, status: 404, headers: new Headers() }; };
+  try {
+    for (const ref of ["localhost:5000/a:b", "127.0.0.1:5000/a:b", "localhost.attacker.example/a:b", "127.0.0.1.attacker.example/a:b"]) await resolveDigest(ref).catch(() => {});
+  } finally { globalThis.fetch = realFetch; }
+  assert.deepEqual(seen.map((u) => u.split("/")[0]), ["http:", "http:", "https:", "https:"]);
+});

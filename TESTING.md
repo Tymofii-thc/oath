@@ -6,7 +6,7 @@ Four levels, from 5 minutes to an hour. Each says what you should see. If someth
 ```bash
 git clone https://github.com/Tymofii-thc/oath && cd oath
 npm ci
-npm test                       # expect: 36 tests, all pass
+npm test                       # expect: all tests pass
 node bin/oath.mjs verify \
   --signer 5D4W8x8UeqW3qVi9uzNzvJPWiJZQaRWVR9ru2ckFhoih \
   --digest sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc

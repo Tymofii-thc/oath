@@ -66,6 +66,7 @@ runs:
         ATTEST: ${{ inputs.attest }}
         ACTION_PATH: ${{ github.action_path }}
         GITHUB_TOKEN: ${{ github.token }}
+        OATH_REGISTRY_AUTH: ${{ format('{{"ghcr.io":{{"username":"{0}","password":"{1}"}}}}', github.actor, github.token) }}   # lets the registry lookup read this repository's own ghcr.io images
       run: |
         args=(verify --signer "$SIGNER" --quorum "$QUORUM")
         [ -n "$IMAGE" ]  && args+=(--image "$IMAGE")

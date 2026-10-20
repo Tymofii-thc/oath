@@ -15,6 +15,7 @@ registryAuth: ""
 registryAuthSecret: ""
 # Periodic audit of already-running Pods (cron expression, empty = off). Hourly by default.
 auditSchedule: "0 * * * *"
+allowedRegistries: []     # registry hosts the webhook may contact, e.g. [ghcr.io, myregistry.azurecr.io]; empty = any host (SSRF surface: set it)
 scanLimit: 1000            # transactions scanned per signer (spam on the signer address can push old records out of the window: raise it)
 # Restrict the webhook's network: ingress on 8443, egress to DNS and TCP 443 only (RPC + registries). Needs a CNI that enforces NetworkPolicy.
 networkPolicy: false

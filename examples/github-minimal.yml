@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - id: meta
@@ -42,6 +43,6 @@ jobs:
       - uses: Tymofii-thc/oath/verify@v0.3.2   # fails the job if the image was not built by the pipeline
         with:
           signer: ${{ vars.OATH_SIGNER }}
-          image: ${{ needs.build.outputs.image }}:latest
+          image: ${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}   # the digest, not the tag
 
-      - run: echo "Replace this with your real deploy."
+      - run: echo "Deploy ${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}. Replace this with your real deploy, and use this digest, not :latest."

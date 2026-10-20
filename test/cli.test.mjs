@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,7 +18,7 @@ const cli = (args, env = {}) => new Promise((resolve) => {
   p.on("close", (code) => resolve({ code, out, err }));
 });
 
-function rpc(memoDigest) {
+function rpc(memoDigest, image = "ghcr.io/me/app") {
   const server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
@@ -27,7 +27,7 @@ function rpc(memoDigest) {
       res.setHeader("content-type", "application/json");
       const result = method === "getTransaction"
         ? { meta: { err: null }, transaction: { message: { accountKeys: [{ pubkey: SIGNER, signer: true }] } } }
-        : params[1].before ? [] : [{ signature: "s1", err: null, blockTime: Math.floor(Date.now() / 1000), memo: `[99] pod1|ghcr.io/me/app|0123456789ab|${memoDigest}|2026-01-01T00:00:00.000Z` }];
+        : params[1].before ? [] : [{ signature: "s1", err: null, blockTime: Math.floor(Date.now() / 1000), memo: `[99] pod1|${image}|0123456789ab|${memoDigest}|2026-01-01T00:00:00.000Z` }];
       res.end(JSON.stringify({ jsonrpc: "2.0", id, result }));
     });
   });
@@ -97,4 +97,50 @@ test("a broken OATH_REGISTRY_AUTH is reported as that, and its value is not prin
   const r2 = await cli(["anchor", "--image", "reg.example/app:1", "--commit", "0123456789ab"], { OATH_REGISTRY_AUTH: "{bad s3cr3t" });
   assert.match(r2.err, /not valid JSON/);
   assert.ok(!r2.err.includes("s3cr3t"));
+});
+
+// a registry whose tag now points at EVIL, and a fake docker whose local copy still has GOOD
+async function tagSwapSetup() {
+  const GOOD = "sha256:" + "a".repeat(64), EVIL = "sha256:" + "b".repeat(64);
+  let hits = 0;
+  const registry = http.createServer((req, res) => { hits++; res.setHeader("docker-content-digest", EVIL); res.end(); });
+  await new Promise((r) => registry.listen(0, "127.0.0.1", r));
+  const host = `127.0.0.1:${registry.address().port}`;
+  const dir = mkdtempSync(join(tmpdir(), "fake-docker-"));
+  writeFileSync(join(dir, "docker"), `#!/bin/sh\necho "${host}/app@${GOOD}"\n`);
+  chmodSync(join(dir, "docker"), 0o755);
+  return { GOOD, EVIL, host, dir, hits: () => hits, close: () => registry.close() };
+}
+
+test("verify of a tag asks the registry, not the local docker copy that this agent just pushed", async () => {
+  const t = await tagSwapSetup();
+  const m = await rpc(t.GOOD, `${t.host}/app`);
+  try {
+    // the local copy (GOOD) was recorded, but the tag in the registry now points at EVIL: that must not verify
+    const r = await cli(["verify", "--signer", SIGNER, "--image", `${t.host}/app:42`, "--rpc", m.url], { PATH: t.dir });
+    assert.equal(r.code, 1, r.out + r.err);
+    assert.match(r.err + r.out, /NOT VERIFIED/);
+    assert.ok(t.hits() > 0, "the registry was asked");
+  } finally { m.close(); t.close(); }
+});
+
+test("verify falls back to the local docker copy only when the registry cannot be asked, and says so", async () => {
+  const t = await tagSwapSetup();
+  const m = await rpc(t.GOOD, `${t.host}/app`);
+  t.close(); // the registry is gone
+  try {
+    const r = await cli(["verify", "--signer", SIGNER, "--image", `${t.host}/app:42`, "--rpc", m.url], { PATH: t.dir });
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.match(r.err, /could not ask the registry/);
+  } finally { m.close(); }
+});
+
+test("anchor records the digest of the local copy (what this job pushed), not what the tag points to now", async () => {
+  const t = await tagSwapSetup();
+  try {
+    const r = await cli(["anchor", "--image", `${t.host}/app:42`, "--commit", "0123456789ab", "--dry-run"], { PATH: t.dir });
+    assert.equal(r.code, 0, r.err);
+    assert.ok(r.out.includes(t.GOOD) && !r.out.includes(t.EVIL), r.out);
+    assert.equal(t.hits(), 0, "no registry request needed");
+  } finally { t.close(); }
 });

@@ -1,8 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.3.3
 
-- A malformed `OATH_REGISTRY_AUTH` is reported as exactly that (with the character position, never the value) instead of "cannot get the digest".
+From an independent security review (every point was checked against the code first; the open ones are listed in THREAT-MODEL.md, "Not covered").
+- **`oath verify --image <tag>` asks the registry first.** It used to trust the local docker copy, which in a CI job is the image the job had just pushed, so a tag moved in the registry before the deploy went unnoticed. The local copy is now only a fallback and says so. The examples verify and deploy the **same digest** (`repo@sha256:…`); `oath anchor` prints a `Digest :` line for that.
+- **`oath anchor --image <tag>` records the local copy's digest** (what the job pushed) and falls back to the registry; `--dry-run` shows the record without a key.
+- Loopback registries are matched exactly (`localhost.example` no longer counts as loopback).
+- `OATH_ALLOWED_REGISTRIES` can be set from `install.sh` and Helm (`allowedRegistries`); it is still empty (any host) by default.
+- A malformed `OATH_REGISTRY_AUTH` is reported as exactly that (with the character position, never the value).
+- `oath init --out ci-key.json` now writes the right `.gitignore` line; `action.yml` passes its inputs through the environment instead of pasting them into the shell; `scripts/keygen.mjs` (prints a secret) is no longer in the npm package.
+- The browser verifier and the docs no longer call it "the same check as the CLI"; the threat model lists what is still open.
 
 ## 0.3.2
 

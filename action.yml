@@ -26,15 +26,17 @@ runs:
 
     - name: Install dependencies
       shell: bash
-      run: npm ci --omit=dev --prefix "${{ github.action_path }}"
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: npm ci --omit=dev --prefix "$ACTION_PATH"
 
     - name: Anchor digest
       shell: bash
       env:
         SOLANA_SECRET_KEY: ${{ inputs.secret-key }}
         SOLANA_RPC: ${{ inputs.rpc }}
-      run: |
-        node "${{ github.action_path }}/scripts/anchor.mjs" \
-          --image "${{ inputs.image }}" \
-          --digest "${{ inputs.digest }}" \
-          --commit "${{ github.sha }}"
+        IMAGE: ${{ inputs.image }}
+        DIGEST: ${{ inputs.digest }}
+        COMMIT: ${{ github.sha }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: node "$ACTION_PATH/scripts/anchor.mjs" --image "$IMAGE" --digest "$DIGEST" --commit "$COMMIT"

@@ -11,7 +11,7 @@
 
 > The version submitted to the hackathon is tagged [`hackathon-submission`](https://github.com/Tymofii-thc/oath/tree/hackathon-submission). `main` contains later security fixes (see [THREAT-MODEL.md](THREAT-MODEL.md)).
 
-Oath stops a container image from reaching production unless your own pipeline built it. Live verifier: **https://tymofii-thc.github.io/oath/**
+Oath stops a container image from reaching production unless your CI recorded it (a signed record of its digest on Solana). Live verifier: **https://tymofii-thc.github.io/oath/**
 
 **Problem.** A swapped image in the registry, a manual `docker push` that bypasses CI, a compromised token: nobody notices that production runs something other than what was built. That is a supply-chain attack, and the code in git can be perfectly clean.
 
@@ -66,7 +66,7 @@ Exit codes: `0` verified, `1` not verified, `2` error (network, arguments). Opti
 
 `verify --image repo@sha256:…` needs neither docker nor a registry call; for a tag that is not in local docker the digest is read from the registry (private ones: `OATH_REGISTRY_AUTH`). CI examples: [`examples/github-minimal.yml`](examples/github-minimal.yml) and [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) (the Azure one was tested on a real Azure DevOps pipeline with ACR).
 
-`verifier/` is the same check in the browser, for demos and for people who avoid the terminal.
+`verifier/` is a simplified check in the browser, for demos and for people who avoid the terminal: it confirms that the signer really recorded the digest, but it does not look at revocations, quorum, the image name, `--max-age` or attestations. Use the CLI for decisions.
 
 ## Azure DevOps (and other CI systems)
 `oath anchor` and `oath verify` are plain commands, so any CI works. [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) is a complete pipeline for Azure Container Registry. **Tested on a real Azure DevOps pipeline with ACR (2026-10-20): record and verify both passed.** Not tested: Azure Container Apps deploys, Key Vault-backed variables.
@@ -74,7 +74,7 @@ Exit codes: `0` verified, `1` not verified, `2` error (network, arguments). Opti
 Setup: `oath init`, then a variable group with `SOLANA_SECRET_KEY` (secret), `OATH_SIGNER` and `OATH_REGISTRY_AUTH` (secret, `{"<registry>.azurecr.io":{"username":"…","password":"…"}}`, host in lowercase). Azure does not pass secret variables to scripts by itself: map each one in `env`. For the ACR login use the admin user (username = registry name), or a repository token with read scope (username = token name), or a service principal with `AcrPull`.
 
 **What this protects, and what it does not.** The `verify` step is voluntary: whoever controls the deployment can leave it out, and a pipeline that does not contain it deploys anything. It becomes mandatory only where the image runs (the Kubernetes webhook) or where deployment rights belong to your pipeline alone. There is no admission webhook for Azure Container Apps, so there the gate is the `verify` step plus those rights.
-- Stolen registry credentials: an attacker can push an image, but cannot record its digest, so the pipeline refuses to deploy it. A swapped tag is refused the same way.
+- Stolen registry credentials: an attacker can push an image, but cannot record its digest, so the pipeline refuses to deploy it. A swapped tag is refused the same way, as long as you verify and deploy the same digest (`repo@sha256:…`), as the examples do.
 - The records live on Solana, outside Azure: someone who gets admin in Azure cannot rewrite what was recorded.
 - Someone who can edit your pipeline or read the `SOLANA_SECRET_KEY` variable can record anything: use `--quorum 2` with an approver key that is not in Azure DevOps (see below), and limit who can edit pipelines.
 - Someone with direct rights on the registry and the Container App can still replace the running image by hand (portal, `az`). oath cannot block that. Take `AcrPush` and write access to the Container App away from people, leaving them to the pipeline's service connection, and check what is running: `oath verify --signer <key> --image <the image from az containerapp show>` fails if it was not built by the pipeline.
@@ -89,7 +89,7 @@ kubectl run t --image=nginx        # → denied: no pipeline build anchored by t
 - For each new Pod it takes every image (`initContainers`, `containers`, `ephemeralContainers`), resolves the tag to a digest through the registry and looks for a record on Solana. No record: the Pod is not created (including Pods of Deployments and Jobs).
 - **Pins the tag to the verified digest** (`app:latest` → `app@sha256:…`), so the kubelet pulls exactly what was verified and the tag can't be moved between check and pull.
 - **Fails closed:** an unreachable registry, RPC or the webhook itself means the Pod is rejected (`failurePolicy: Fail`). Exempt: `kube-system`, `kube-public`, `kube-node-lease` and `oath-system`, so the cluster can't lock itself out.
-- **Helm instead of `install.sh`:** `helm install oath oci://ghcr.io/tymofii-thc/charts/oath --version 0.2.0 -n oath-system --create-namespace --set signer=<pubkey>` (values: `network`, `rpc` / `rpcSecret`, `mode`, `failurePolicy`, `quorum`, `attestRepo`, `staleOkHours`, `registryAuth`, `auditSchedule`; TLS is generated by Helm and reused on upgrade). Tested in kind: install, deny, `mode=audit` upgrade, audit CronJob, uninstall. The API server may need a few seconds after `helm install` before the Service answers.
+- **Helm instead of `install.sh`:** `helm install oath oci://ghcr.io/tymofii-thc/charts/oath --version 0.2.0 -n oath-system --create-namespace --set signer=<pubkey>` (values: `network`, `rpc` / `rpcSecret`, `mode`, `failurePolicy`, `quorum`, `attestRepo`, `staleOkHours`, `registryAuth`, `allowedRegistries`, `auditSchedule`; TLS is generated by Helm and reused on upgrade). Tested in kind: install, deny, `mode=audit` upgrade, audit CronJob, uninstall. The API server may need a few seconds after `helm install` before the Service answers.
 - `OATH_MODE=audit` allows everything but returns warnings: useful for a first rollout.
 - `OATH_FAILURE_POLICY=Ignore deploy/install.sh` sets `failurePolicy: Ignore` (availability over enforcement; combine with `oath audit`). The webhook runs 2 replicas with a PodDisruptionBudget.
 - Private registries: `OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'` (tested against a password-protected registry and a mock token registry; note that the kubelet still needs its own `imagePullSecrets` to pull the image).
