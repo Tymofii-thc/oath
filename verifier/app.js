@@ -336,11 +336,18 @@
 
   /* getSignaturesForAddress also lists transactions that merely mention the address (anyone can add it as a read-only
      account next to a memo they signed themselves), so a record counts only if the signer really signed the transaction. */
-  const signedCache = new Map(); // a confirmed transaction never changes: ask once per page load (the public RPC rate-limits bursts)
+  // a confirmed transaction never changes: ask once (the public devnet RPC allows ~10 getTransaction per 10 s per IP).
+  // The answer also survives a reload in sessionStorage; storage may be blocked, then the in-memory cache still works.
+  const signedCache = new Map();
+  function stored(id, val) {
+    try { if (val === undefined) { const v = sessionStorage.getItem('oath.sig.' + id); return v === null ? undefined : v === '1'; } sessionStorage.setItem('oath.sig.' + id, val ? '1' : '0'); } catch { /* ignore */ }
+    return undefined;
+  }
   function signedBy(net, key, sig) {
     const id = net + ':' + key + ':' + sig;
     if (!signedCache.has(id)) {
-      const p = signedByUncached(net, key, sig);
+      const known = stored(id);
+      const p = known !== undefined ? Promise.resolve(known) : signedByUncached(net, key, sig).then((v) => { stored(id, v); return v; });
       signedCache.set(id, p);
       p.catch(() => signedCache.delete(id));
     }
@@ -357,14 +364,17 @@
   async function signedByRetry(net, key, sig) {
     for (let i = 0; ; i++) {
       try { return await signedBy(net, key, sig); }
-      catch (e) { if (i >= 4 || !/429|rate|limit/i.test(String(e && e.message))) throw e; await sleep(2000 * (i + 1)); }
+      catch (e) { if (i >= 4 || !/429|rate|limit/i.test(String(e && e.message))) throw e; await sleep(1000 * (i + 1)); }
     }
   }
 
   async function verifyRest(net, results) {
-    const out = [];
-    for (const r of results) for (const rec of r.rest || []) if (await signedByRetry(net, r.key, rec.sig)) out.push(rec);
-    return out;
+    const todo = results.flatMap((r) => (r.rest || []).map((rec) => ({ key: r.key, rec })));
+    const flags = new Array(todo.length).fill(false);
+    let next = 0;
+    const worker = async () => { for (let i = next++; i < todo.length; i = next++) flags[i] = await signedByRetry(net, todo[i].key, todo[i].rec.sig); };
+    await Promise.all([worker(), worker(), worker()]); // a few at a time: one by one is slow, all at once trips the rate limit
+    return todo.filter((_, i) => flags[i]).map((x) => x.rec);
   }
 
   async function fetchSigner(net, key, digest) {
