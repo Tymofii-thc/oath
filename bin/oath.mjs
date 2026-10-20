@@ -366,7 +366,90 @@ async function init() {
   process.exit(funded ? 0 : 1);
 }
 
+// options: [flag, description] pairs, padded to one column per command
+const help = (title, usage, options, extra = []) => {
+  const w = Math.max(...options.map(([f]) => f.length));
+  return [title, "", `Usage: ${usage}`, "", ...options.map(([f, d]) => `  ${f.padEnd(w)}  ${d}`), ...(extra.length ? ["", ...extra] : [])];
+};
+const NETWORK = [
+  ["--network <name>", "devnet (default) or mainnet"],
+  ["--rpc <url>", "use this Solana RPC instead (comma-separate several for failover; or SOLANA_RPC)"],
+];
+const HELP = {
+  init: help("oath init: create a CI key, fund it on devnet, print the setup steps",
+    "oath init [--approver] [--out <file>] [--set-github] [--no-wait]", [
+      ["--approver", "make the second key for --quorum 2 instead (it must stay out of CI secrets)"],
+      ["--out <file>", "where to write the key (default .oath/ci-key.json, or .oath/approver-key.json)"],
+      ["--set-github", "also set the GitHub secret and variable (needs the gh CLI, logged in)"],
+      ["--no-wait", "do not wait for the key to be funded"],
+      ...NETWORK]),
+  anchor: help("oath anchor: record a built image on Solana. Run it in CI right after the build.",
+    "oath anchor --image <ref> [--digest sha256:…] [--commit <sha>] [--key-file <file>]", [
+      ["--image <ref>", "image name, e.g. ghcr.io/me/app:latest (the digest is read from the registry)"],
+      ["--digest sha256:…", "use this digest instead of asking the registry"],
+      ["--commit <sha>", "default: GITHUB_SHA, BUILD_SOURCEVERSION, CI_COMMIT_SHA, or the current git commit"],
+      ["--key-file <file>", "the signing key; default: the SOLANA_SECRET_KEY environment variable"],
+      ...NETWORK],
+    ['Private registry: OATH_REGISTRY_AUTH=\'{"host":{"username":"u","password":"p"}}\'']),
+  verify: help("oath verify: is this image one your pipeline built? Run it before deploy.",
+    "oath verify --signer <pubkey> (--image <ref> | --digest sha256:… | --container <name>)", [
+      ["--signer <key[,key]>", "public key(s) of the CI signer; several accept a key rotation (or OATH_SIGNER)"],
+      ["--image <ref>", "repo@sha256:… needs no docker; a tag is read from local docker, else from the registry"],
+      ["--digest sha256:…", "check a digest directly (the image name is not checked)"],
+      ["--container <name>", "the image a running docker container uses"],
+      ["--quorum <N>", "at least N different signers must have recorded it"],
+      ["--max-age <days>", "ignore records older than this"],
+      ["--attest <owner/repo>", "also require the Sigstore build attestation from that repository"],
+      ["--no-bind", "do not require the record's image name to match the image"],
+      ...NETWORK],
+    ["Exit code: 0 verified, 1 not verified (stop the deploy), 2 error"]),
+  audit: help("oath audit: check every Pod that is already running in a Kubernetes cluster",
+    "oath audit --signer <pubkey> [--in-cluster | --file pods.json] [--skip-namespaces a,b]", [
+      ["--signer <key[,key]>", "public key(s) of the CI signer (or OATH_SIGNER)"],
+      ["--in-cluster", "read Pods through the Pod's own service account (for a CronJob)"],
+      ["--file <pods.json>", "a saved `kubectl get pods -A -o json` (- for stdin)"],
+      ["--skip-namespaces a,b", "leave these namespaces out"],
+      ["--quorum, --max-age", "as in `oath verify`"],
+      ...NETWORK],
+    ["Default: the current kubectl context. Exit code: 0 all verified, 1 something is not, 2 error"]),
+  revoke: help("oath revoke: mark a digest as bad. It never verifies again, even if it is recorded later.",
+    "oath revoke --digest sha256:… [--reason <text>] [--key-file <file>]", [
+      ["--digest sha256:…", "the digest to revoke"],
+      ["--reason <text>", "shown by verify and audit (up to 100 characters)"],
+      ["--key-file <file>", "a trusted signer's key; default: the SOLANA_SECRET_KEY environment variable"],
+      ...NETWORK]),
+};
+const MAIN_HELP = [
+  "oath: stop deploys of images your pipeline did not build",
+  "",
+  "Usage: oath <command> [options]",
+  "",
+  "Commands",
+  "  init     create a CI key, fund it on devnet, print the setup steps",
+  "  anchor   record a built image on Solana (in CI, after the build)",
+  "  verify   check an image against the records (before deploy; exit 1 = not verified)",
+  "  audit    check every Pod already running in a Kubernetes cluster",
+  "  revoke   mark a digest as bad",
+  "",
+  "`oath <command> --help` lists a command's options.   `oath --version` prints the version.",
+  "Docs: https://github.com/Tymofii-thc/oath",
+];
+
 const cmd = process.argv[2];
+const wantsHelp = process.argv.slice(3).some((a) => a === "--help" || a === "-h");
+if (!cmd || cmd === "help" || cmd === "--help" || cmd === "-h") {
+  const topic = cmd === "help" ? process.argv[3] : null;
+  console.log((topic && HELP[topic] ? HELP[topic] : MAIN_HELP).join("\n"));
+  process.exit(0);
+}
+if (cmd === "--version" || cmd === "-v") {
+  console.log(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version);
+  process.exit(0);
+}
+if (HELP[cmd] && wantsHelp) {
+  console.log(HELP[cmd].join("\n"));
+  process.exit(0);
+}
 if (cmd === "verify") {
   await verify();
 } else if (cmd === "audit") {
@@ -378,6 +461,6 @@ if (cmd === "verify") {
 } else if (cmd === "anchor") {
   await anchor();
 } else {
-  console.error("Usage: oath anchor --image <ref> [--digest sha256:…] [--commit <sha>] [--key-file <path>] [--network …]\n       oath revoke --digest sha256:… --reason <text> [--key-file <path>] [--network …]\n       oath init [--out .oath/ci-key.json] [--approver] [--no-wait] [--set-github]\n       oath audit --signer <pubkey[,pubkey]> [--file pods.json|-] [--skip-namespaces a,b] [--network …]\n       oath verify --signer <pubkey[,pubkey]> (--digest sha256:… | --image <ref> | --container <name>) [--network devnet|mainnet | --rpc <url>] [--max-age <days>] [--quorum <N>] [--attest <owner/repo>] [--no-bind]");
+  console.error(`Unknown command "${cmd}".\n\n${MAIN_HELP.join("\n")}`);
   process.exit(2);
 }

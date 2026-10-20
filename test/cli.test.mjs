@@ -71,3 +71,19 @@ test("anchor takes the commit from the CI environment and fails clearly when it 
   assert.equal(r.code, 2);
   assert.match(r.err, /could not send the record/); // got as far as sending: image, digest, commit and key were all accepted
 });
+
+test("--help lists every command, `<command> --help` lists its options, --version matches package.json", async () => {
+  const main = await cli(["--help"]);
+  assert.equal(main.code, 0);
+  for (const c of ["init", "anchor", "verify", "audit", "revoke"]) assert.match(main.out, new RegExp(`^  ${c}\\s+\\S`, "m"), c);
+  const v = await cli(["verify", "--help"]);
+  assert.equal(v.code, 0);
+  assert.match(v.out, /--signer/);
+  assert.match(v.out, /--quorum/);
+  assert.equal((await cli(["help", "anchor"])).code, 0);
+  const version = (await cli(["--version"])).out.trim();
+  assert.equal(version, JSON.parse((await import("node:fs")).readFileSync(join(root, "package.json"), "utf8")).version);
+  const bad = await cli(["nope"]);
+  assert.equal(bad.code, 2);
+  assert.match(bad.err, /Unknown command/);
+});

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `oath --help` explains every command; `oath <command> --help` lists its options; `oath --version`. An unknown command exits 2 with the command list.
+
 ## 0.3.1
 
 - `oath init` prints shorter, grouped next steps (three numbered steps, one optional hint); the approver output points to `oath anchor` and the approve page.
