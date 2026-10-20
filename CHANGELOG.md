@@ -30,7 +30,7 @@
 **Site and docs**
 - New site design; the verifier no longer trips the public devnet rate limit (signature checks are cached and run on demand).
 - The approve page lets you choose between installed wallets; signing is confirmed with Phantom and Solflare (Ledger is untested).
-- `examples/github-minimal.yml` and `examples/azure-pipelines.yml` (the Azure one is not tested on a live pipeline).
+- `examples/github-minimal.yml` and `examples/azure-pipelines.yml` (the Azure one was tested on a real pipeline with ACR; the release notes of v0.3.2 said it was not).
 
 ## 0.2.0
 

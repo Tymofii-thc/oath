@@ -61,10 +61,21 @@ node bin/oath.mjs verify --signer <pubkey> --image ghcr.io/me/app:latest
 node bin/oath.mjs verify --signer <pubkey> --container prod      # образ, що ЗАРАЗ працює
 node bin/oath.mjs anchor --image ghcr.io/me/app:latest           # запис збірки з будь-якого CI (SOLANA_SECRET_KEY; digest бере з реєстру, docker не потрібен)
 ```
-`verify --image repo@sha256:…` не потребує ні docker, ні звернення до реєстру. Якщо образу немає локально, digest тега береться з реєстру (приватні: `OATH_REGISTRY_AUTH`). Приклади для CI: [`examples/github-minimal.yml`](examples/github-minimal.yml) і [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) (Azure не перевірено на живому pipeline).
+`verify --image repo@sha256:…` не потребує ні docker, ні звернення до реєстру. Якщо образу немає локально, digest тега береться з реєстру (приватні: `OATH_REGISTRY_AUTH`). Приклади для CI: [`examples/github-minimal.yml`](examples/github-minimal.yml) і [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) (Azure перевірено на справжньому pipeline з ACR).
 Коди виходу: `0` перевірено, `1` не перевірено, `2` помилка (мережа, аргументи). Для мейннету додай `--rpc <url>` або змінну `SOLANA_RPC` (і те саме для кроку 2 через вхід `rpc`).
 
 `verifier/index.html` це та сама перевірка у браузері, для демо й для людей, які не лізуть у термінал. Живий: https://tymofii-thc.github.io/oath/
+
+## Azure DevOps (та інші CI)
+`oath anchor` і `oath verify` це звичайні команди, тож працює будь-який CI. [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) це повний pipeline для Azure Container Registry. **Перевірено на справжньому pipeline в Azure DevOps з ACR (2026-10-20): і запис, і перевірка пройшли.** Не перевірено: деплой в Azure Container Apps, змінні з Key Vault.
+
+Налаштування: `oath init`, потім variable group зі змінними `SOLANA_SECRET_KEY` (secret), `OATH_SIGNER` і `OATH_REGISTRY_AUTH` (secret, `{"<реєстр>.azurecr.io":{"username":"…","password":"…"}}`, адреса малими літерами). Azure сам не передає секретні змінні в скрипти: кожну треба явно прописати в `env`. Для логіну в ACR підійде адмін-користувач (username це імʼя реєстру), або токен з правом читання (username це імʼя токена), або service principal з роллю `AcrPull`.
+
+**Що це захищає, а що ні.** Для Azure Container Apps немає admission webhook, тож брама це крок `verify` у pipeline.
+- Викрадені облікові дані реєстру: зловмисник може запушити образ, але не може записати його digest, тому pipeline не розгорне його. Підмінений тег відхиляється так само.
+- Записи лежать у Solana, поза Azure: той, хто отримав адміністратора в Azure, не може переписати те, що записано.
+- Хто може змінювати pipeline або читати змінну `SOLANA_SECRET_KEY`, може записати будь-що: використовуй `--quorum 2` із ключем затверджувача, якого нема в Azure DevOps (див. нижче), і обмеж, хто може змінювати pipeline.
+- Хто має прямі права на реєстр і Container App, усе ще може вручну замінити запущений образ (портал, `az`). oath цього не заблокує. Забери в людей `AcrPush` і право писати в Container App, лиши їх service connection для pipeline, і перевіряй, що саме працює: `oath verify --signer <ключ> --image <образ з az containerapp show>` провалиться, якщо його не збудував pipeline.
 
 ## Захист кластера (Kubernetes admission webhook)
 Перевірка в CI-кроці не зупинить того, хто робить `kubectl apply` в обхід пайплайну. Тому є webhook, який стоїть у самому кластері:

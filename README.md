@@ -64,9 +64,20 @@ oath anchor --image ghcr.io/me/app:latest           # record a build from any CI
 ```
 Exit codes: `0` verified, `1` not verified, `2` error (network, arguments). Options: `--network devnet|mainnet` or `--rpc <url>`, `--max-age <days>`, `--quorum <N>`, `--attest <owner/repo>`, `--no-bind`.
 
-`verify --image repo@sha256:…` needs neither docker nor a registry call; for a tag that is not in local docker the digest is read from the registry (private ones: `OATH_REGISTRY_AUTH`). CI examples: [`examples/github-minimal.yml`](examples/github-minimal.yml) and [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) (the Azure one is not tested on a live pipeline).
+`verify --image repo@sha256:…` needs neither docker nor a registry call; for a tag that is not in local docker the digest is read from the registry (private ones: `OATH_REGISTRY_AUTH`). CI examples: [`examples/github-minimal.yml`](examples/github-minimal.yml) and [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) (the Azure one was tested on a real Azure DevOps pipeline with ACR).
 
 `verifier/` is the same check in the browser, for demos and for people who avoid the terminal.
+
+## Azure DevOps (and other CI systems)
+`oath anchor` and `oath verify` are plain commands, so any CI works. [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) is a complete pipeline for Azure Container Registry. **Tested on a real Azure DevOps pipeline with ACR (2026-10-20): record and verify both passed.** Not tested: Azure Container Apps deploys, Key Vault-backed variables.
+
+Setup: `oath init`, then a variable group with `SOLANA_SECRET_KEY` (secret), `OATH_SIGNER` and `OATH_REGISTRY_AUTH` (secret, `{"<registry>.azurecr.io":{"username":"…","password":"…"}}`, host in lowercase). Azure does not pass secret variables to scripts by itself: map each one in `env`. For the ACR login use the admin user (username = registry name), or a repository token with read scope (username = token name), or a service principal with `AcrPull`.
+
+**What this protects, and what it does not.** There is no admission webhook for Azure Container Apps, so the gate is the `verify` step of your pipeline.
+- Stolen registry credentials: an attacker can push an image, but cannot record its digest, so the pipeline refuses to deploy it. A swapped tag is refused the same way.
+- The records live on Solana, outside Azure: someone who gets admin in Azure cannot rewrite what was recorded.
+- Someone who can edit your pipeline or read the `SOLANA_SECRET_KEY` variable can record anything: use `--quorum 2` with an approver key that is not in Azure DevOps (see below), and limit who can edit pipelines.
+- Someone with direct rights on the registry and the Container App can still replace the running image by hand (portal, `az`). oath cannot block that. Take `AcrPush` and write access to the Container App away from people, leaving them to the pipeline's service connection, and check what is running: `oath verify --signer <key> --image <the image from az containerapp show>` fails if it was not built by the pipeline.
 
 ## Protecting the cluster (Kubernetes admission webhook)
 A CI step can't stop someone who runs `kubectl apply` directly. So there is a webhook inside the cluster:

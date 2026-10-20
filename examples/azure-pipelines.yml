@@ -1,4 +1,5 @@
-# oath in Azure DevOps. NOT tested on a live Azure DevOps pipeline: written from the docs and from running the same commands locally.
+# oath in Azure DevOps with Azure Container Registry. Tested on a real pipeline (2026-10-20): record and verify both passed.
+# There is no admission webhook for Container Apps, so this verify step is the gate: see README, "Azure DevOps".
 # Setup once: `npx --yes oath-verify init`, then a variable group "oath" (Pipelines > Library) with
 #   SOLANA_SECRET_KEY  (lock icon = secret): the contents of .oath/ci-key.json
 #   OATH_SIGNER        : the public key init printed
