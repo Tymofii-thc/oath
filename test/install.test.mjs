@@ -12,7 +12,7 @@ test("install.sh puts the RPC URL (with '&', ',' and '|') into a Secret, not int
   const applied = join(dir, "applied.yaml");
   // stub kubectl: records what is piped into `apply`, succeeds at everything else
   const calls = join(dir, "calls.txt");
-  writeFileSync(join(dir, "kubectl"), `#!/bin/sh\necho "$@" >> "${calls}"\ncase "$*" in *apply*) cat >> "${applied}";; esac\nexit 0\n`);
+  writeFileSync(join(dir, "kubectl"), `#!/bin/sh\necho "$@" >> "${calls}"\ncase "$*" in *apply*) cat >> "${applied}";; *"get job/"*) printf 1;; esac\nexit 0\n`);
   chmodSync(join(dir, "kubectl"), 0o755);
   const rpc = "https://rpc.example/?api-key=k&commitment=confirmed,https://b.example/x|y";
   const r = spawnSync("bash", [join(root, "deploy/install.sh")], {
@@ -42,7 +42,7 @@ test("oath init --approver makes an approver key and does not tell you to put it
 test("install.sh substitutes values that contain '&' (e.g. the image reference)", () => {
   const dir = mkdtempSync(join(tmpdir(), "oath-install2-"));
   const applied = join(dir, "applied.yaml");
-  writeFileSync(join(dir, "kubectl"), `#!/bin/sh\ncase "$*" in *apply*) cat >> "${applied}";; esac\nexit 0\n`);
+  writeFileSync(join(dir, "kubectl"), `#!/bin/sh\ncase "$*" in *apply*) cat >> "${applied}";; *"get job/"*) printf 1;; esac\nexit 0\n`);
   chmodSync(join(dir, "kubectl"), 0o755);
   const r = spawnSync("bash", [join(root, "deploy/install.sh")], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, OATH_SIGNER: "A&B|C", OATH_IMAGE: "img:1" }, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
@@ -53,7 +53,7 @@ test("install.sh audits already-running Pods by default (CronJob + one run now) 
   const run = (extra) => {
     const dir = mkdtempSync(join(tmpdir(), "oath-audit-"));
     const calls = join(dir, "calls.txt"), applied = join(dir, "applied.yaml");
-    writeFileSync(join(dir, "kubectl"), `#!/bin/sh\necho "$@" >> "${calls}"\ncase "$*" in *apply*) cat >> "${applied}";; esac\nexit 0\n`);
+    writeFileSync(join(dir, "kubectl"), `#!/bin/sh\necho "$@" >> "${calls}"\ncase "$*" in *apply*) cat >> "${applied}";; *"get job/"*) printf 1;; esac\nexit 0\n`);
     chmodSync(join(dir, "kubectl"), 0o755);
     const r = spawnSync("bash", [join(root, "deploy/install.sh")], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, OATH_SIGNER: "S", OATH_IMAGE: "img:1", ...extra }, encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
