@@ -24,7 +24,7 @@ deploy ──► docker pull ──► oath verify ──► ✔ exit 0  → dep
                                          ✘ exit 1  → deploy stopped
 ```
 
-`oath` below means `node bin/oath.mjs` (or `npx --yes oath-verify`, from npm).
+**Install:** `npm install -g oath-verify` gives you the `oath` command. Or skip the install and put `npx --yes oath-verify` in front of any command below (handy in CI: pin it as `npx --yes oath-verify@0.3.1`). In a clone, `node bin/oath.mjs` is the same thing. `oath` below means any of these.
 
 ## Set up in 3 steps
 
