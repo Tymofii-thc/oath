@@ -201,7 +201,7 @@
       tag_blocked: 'Заблоковано',
       tag_limited: 'Частково',
       tag_mitigated: 'Зменшено',
-      tag_closed: 'Fail closed',
+      tag_closed: 'Закрито',
       r1_s: 'Образ підмінено під тим самим тегом',
       r1_w: 'Для нового digest запису нема.',
       r2_s: 'Push або kubectl apply в обхід CI',

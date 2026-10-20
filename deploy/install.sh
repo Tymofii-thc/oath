@@ -40,12 +40,13 @@ else
   kubectl -n "$ns" delete secret oath-rpc --ignore-not-found >/dev/null
 fi
 tls_sum="$(sha256sum < "$tmp/tls.crt" | cut -c1-16)"
+auth_sum="$(printf '%s' "${OATH_REGISTRY_AUTH:-}" | sha256sum | cut -c1-16)"
 rpc_sum="$(printf '%s' "$SOLANA_RPC" | sha256sum | cut -c1-16)"
 
 ca="$(base64 -w0 < "$tmp/ca.crt")"
 # values go into sed replacements: escape the characters that mean something there (a URL with ?a=1&b=2 would otherwise be mangled)
 esc() { printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'; }
-sed -e "s|__OATH_IMAGE__|$(esc "$OATH_IMAGE")|" -e "s|__OATH_SIGNER__|$(esc "$OATH_SIGNER")|" -e "s|__OATH_NETWORK__|$(esc "$OATH_NETWORK")|" -e "s|__FAILURE_POLICY__|$(esc "$OATH_FAILURE_POLICY")|" -e "s|__OATH_MODE__|$(esc "$OATH_MODE")|" -e "s|__OATH_QUORUM__|$(esc "$OATH_QUORUM")|" -e "s|__OATH_STALE_OK_HOURS__|$(esc "$OATH_STALE_OK_HOURS")|" -e "s|__OATH_LIMIT__|$(esc "$OATH_LIMIT")|" -e "s|__OATH_ATTEST_REPO__|$(esc "$OATH_ATTEST_REPO")|" -e "s|__CA_BUNDLE__|$(esc "$ca")|" -e "s|__RPC_SUM__|$rpc_sum|" -e "s|__TLS_SUM__|$tls_sum|" "$here/k8s/oath.yaml" | kubectl apply -f -
+sed -e "s|__OATH_IMAGE__|$(esc "$OATH_IMAGE")|" -e "s|__OATH_SIGNER__|$(esc "$OATH_SIGNER")|" -e "s|__OATH_NETWORK__|$(esc "$OATH_NETWORK")|" -e "s|__FAILURE_POLICY__|$(esc "$OATH_FAILURE_POLICY")|" -e "s|__OATH_MODE__|$(esc "$OATH_MODE")|" -e "s|__OATH_QUORUM__|$(esc "$OATH_QUORUM")|" -e "s|__OATH_STALE_OK_HOURS__|$(esc "$OATH_STALE_OK_HOURS")|" -e "s|__OATH_LIMIT__|$(esc "$OATH_LIMIT")|" -e "s|__OATH_ATTEST_REPO__|$(esc "$OATH_ATTEST_REPO")|" -e "s|__CA_BUNDLE__|$(esc "$ca")|" -e "s|__RPC_SUM__|$rpc_sum|" -e "s|__TLS_SUM__|$tls_sum|" -e "s|__AUTH_SUM__|$auth_sum|" "$here/k8s/oath.yaml" | kubectl apply -f -
 kubectl -n "$ns" rollout status deploy/oath-webhook --timeout=120s
 # Pods that were already running are not seen by the webhook, so audit them: hourly by default, and once right now.
 # OATH_AUDIT_SCHEDULE is a cron expression; "off" skips the CronJob and the first run.

@@ -46,6 +46,7 @@ spec:
       annotations:
         checksum/tls: {{ $tls.crt | sha256sum }}
         checksum/rpc: {{ .Values.rpc | sha256sum }}
+        checksum/registry-auth: {{ .Values.registryAuth | sha256sum }}
     spec:
       securityContext:
         runAsNonRoot: true
