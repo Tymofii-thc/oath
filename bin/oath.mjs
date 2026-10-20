@@ -271,12 +271,12 @@ async function init() {
   let kp;
   if (existsSync(out)) {
     kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(out, "utf8"))));
-    console.log(`Using the existing key in ${out}`);
+    console.log(`Using the existing key: ${out}`);
   } else {
     kp = Keypair.generate();
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, JSON.stringify(Array.from(kp.secretKey)), { mode: 0o600 });
-    console.log(`Created ${approver ? "an approver" : "a CI"} key in ${out} (permissions 600; keep it out of git and chat)`);
+    console.log(`Created ${approver ? "an approver" : "a CI"} key: ${out}   (never printed; keep it out of git and chat)`);
     try { // keep the key out of git
       const gi = ".gitignore";
       const entry = dirname(out).split("/")[0] + "/";
@@ -285,7 +285,7 @@ async function init() {
     } catch { /* not fatal */ }
   }
   const pub = kp.publicKey.toBase58();
-  console.log(`\nPublic key (${approver ? "the approver's public key, safe to share" : "this is OATH_SIGNER, safe to share"}):\n  ${pub}\n`);
+  console.log(`\nPublic key (${approver ? "the approver key, safe to share" : "OATH_SIGNER, safe to share"}):\n  ${pub}\n`);
 
   const rpcUrl = resolveRpc({ rpc: arg("rpc"), network });
   const conn = new Connection(rpcUrl, { commitment: "confirmed", disableRetryOnRateLimit: true }); // fail fast: the public faucet is often rate-limited
@@ -313,50 +313,56 @@ async function init() {
     }
   }
 
+  const say = (...lines) => console.log(lines.join("\n"));
   if (approver) {
-    console.log("\nNext steps (approver key; do NOT add this key to GitHub secrets, that would defeat the quorum)");
-    console.log(`  1. Trust both keys:  --signer <ciKey>,${pub} --quorum 2   (webhook: OATH_SIGNER=<ciKey>,${pub} OATH_QUORUM=2)`);
-    console.log(`  2. Approve a build:  SOLANA_SECRET_KEY="$(cat ${out})" node scripts/anchor.mjs --image ghcr.io/me/app --digest sha256:… --commit <sha>`);
-    console.log("     or sign from a browser wallet instead (no key file needed): verifier/approve.html");
-    console.log("  3. Keep the key file off CI and off shared machines.");
+    say("\nNext steps. This key stays OFF GitHub: putting it in CI secrets would defeat the quorum.",
+      "",
+      "1  Trust both keys",
+      `     oath verify --signer <ciKey>,${pub} --quorum 2 …`,
+      `     webhook:  OATH_SIGNER=<ciKey>,${pub}  OATH_QUORUM=2`,
+      "",
+      "2  Approve each build with this key",
+      `     SOLANA_SECRET_KEY="$(cat ${out})" oath anchor --image ghcr.io/me/app --digest sha256:…`,
+      "   or from a browser wallet, no key file needed:",
+      "     https://tymofii-thc.github.io/oath/approve.html",
+      "",
+      "3  Keep the key file off CI and off shared machines.");
     process.exit(funded ? 0 : 1);
   }
 
-  console.log("\nNext steps");
-  console.log("  1. Add two things to your GitHub repository:");
-  console.log(`       secret    SOLANA_SECRET_KEY  = the contents of ${out}`);
-  console.log(`       variable  OATH_SIGNER        = ${pub}`);
   let ghDone = false;
   if (flag("set-github")) {
     try {
       execFileSync("gh", ["secret", "set", "SOLANA_SECRET_KEY"], { input: readFileSync(out), stdio: ["pipe", "inherit", "inherit"] });
       execFileSync("gh", ["variable", "set", "OATH_SIGNER", "--body", pub], { stdio: "inherit" });
       ghDone = true;
-      console.log("     (done through the GitHub CLI)");
-    } catch { console.log("     (gh failed or is not logged in; set them by hand)"); }
+    } catch { /* gh failed or is not logged in: the manual steps below still apply */ }
   }
-  if (!ghDone) {
-    console.log(`       with the GitHub CLI:  gh secret set SOLANA_SECRET_KEY < ${out}   &&   gh variable set OATH_SIGNER --body ${pub}`);
-    console.log("       or in the browser:    Settings → Secrets and variables → Actions");
-  }
-  console.log("  2. Record each build, after your image build step:");
-  console.log("       - uses: Tymofii-thc/oath@main");
-  console.log("         with:");
-  console.log("           image: ghcr.io/${{ github.repository }}");
-  console.log("           digest: ${{ steps.build.outputs.digest }}");
-  console.log("           secret-key: ${{ secrets.SOLANA_SECRET_KEY }}");
-  console.log("  3. Verify before deploy:");
-  console.log("       - uses: Tymofii-thc/oath/verify@main");
-  console.log("         with:");
-  console.log("           signer: ${{ vars.OATH_SIGNER }}");
-  console.log("           image: ghcr.io/${{ github.repository }}:latest");
-  console.log("\nRecommended: close the single-key hole");
-  console.log("  Right now, whoever has SOLANA_SECRET_KEY can anchor a forged digest. Create a second, independent");
-  console.log("  approver key — kept OUTSIDE CI, e.g. on your own machine, never as a repository secret:");
-  console.log("    oath init --approver");
-  console.log("  Then require both: --signer <ciKey>,<approverKey> --quorum 2 (or OATH_QUORUM=2 for the webhook).");
-  console.log("  The approver signs each build with their own key (scripts/anchor.mjs) or from a browser wallet");
-  console.log("  (verifier/approve.html) — a stolen CI key alone is then not enough. See README: Signer quorum.");
+  say("\nNext steps", "",
+    ghDone ? "1  GitHub secret and variable: done (through the GitHub CLI)" : "1  Add to your GitHub repo (Settings → Secrets and variables → Actions)",
+    ...(ghDone ? [] : [
+      `     secret    SOLANA_SECRET_KEY   the contents of ${out}`,
+      `     variable  OATH_SIGNER         ${pub}`,
+      "   or in one go:",
+      `     gh secret set SOLANA_SECRET_KEY < ${out} && gh variable set OATH_SIGNER --body ${pub}`]),
+    "",
+    "2  After the image build, record the digest",
+    "     - uses: Tymofii-thc/oath@main",
+    "       with:",
+    "         image: ghcr.io/${{ github.repository }}",
+    "         digest: ${{ steps.build.outputs.digest }}",
+    "         secret-key: ${{ secrets.SOLANA_SECRET_KEY }}",
+    "",
+    "3  Before deploy, verify",
+    "     - uses: Tymofii-thc/oath/verify@main",
+    "       with:",
+    "         signer: ${{ vars.OATH_SIGNER }}",
+    "         image: ghcr.io/${{ github.repository }}:latest",
+    "",
+    "Not on GitHub? `oath anchor` and `oath verify` are plain commands: https://github.com/Tymofii-thc/oath/tree/main/examples",
+    "",
+    "Recommended: a second approver key, so a stolen CI key alone is not enough.",
+    "     oath init --approver");
   process.exit(funded ? 0 : 1);
 }
 

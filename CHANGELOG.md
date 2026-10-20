@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- `oath init` prints shorter, grouped next steps (three numbered steps, one optional hint); the approver output points to `oath anchor` and the approve page.
+
 ## 0.3.0
 
 **CLI**
