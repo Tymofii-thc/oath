@@ -13,14 +13,14 @@ pool:
 variables:
   - group: oath
   - name: image
-    value: conre02.azurecr.io/containers-01/my-container-snake-devops
+    value: myregistry.azurecr.io/my-app
 
 steps:
   - task: Docker@2
     displayName: Build and push
     inputs:
-      containerRegistry: connection-docker-conre02
-      repository: containers-01/my-container-snake-devops
+      containerRegistry: my-acr-service-connection
+      repository: my-app
       command: buildAndPush
       Dockerfile: Dockerfile
       tags: $(Build.BuildId)
