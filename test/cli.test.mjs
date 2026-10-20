@@ -87,3 +87,14 @@ test("--help lists every command, `<command> --help` lists its options, --versio
   assert.equal(bad.code, 2);
   assert.match(bad.err, /Unknown command/);
 });
+
+test("a broken OATH_REGISTRY_AUTH is reported as that, and its value is not printed", async () => {
+  const r = await cli(["anchor", "--image", "reg.example/app:1", "--commit", "0123456789ab"], { OATH_REGISTRY_AUTH: '{"reg.example":{"username":"u","password":"s3cr3t"oops"}}' });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /OATH_REGISTRY_AUTH is not valid JSON/);
+  assert.ok(!r.err.includes("s3cr3t"), "the password must not appear in the error");
+  // some Node versions put an excerpt of the bad text into the parse error: it must not reach the output either
+  const r2 = await cli(["anchor", "--image", "reg.example/app:1", "--commit", "0123456789ab"], { OATH_REGISTRY_AUTH: "{bad s3cr3t" });
+  assert.match(r2.err, /not valid JSON/);
+  assert.ok(!r2.err.includes("s3cr3t"));
+});

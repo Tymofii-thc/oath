@@ -54,7 +54,11 @@ function pickRepoDigest(lines, ref) {
   return chosen ? { digest: extractDigest(chosen), repo: repoName(chosen) } : null;
 }
 
-const registryAuths = () => (process.env.OATH_REGISTRY_AUTH ? JSON.parse(process.env.OATH_REGISTRY_AUTH) : {});
+const registryAuths = () => {
+  if (!process.env.OATH_REGISTRY_AUTH) return {};
+  try { return JSON.parse(process.env.OATH_REGISTRY_AUTH); } // the value itself is never printed: it holds a password
+  catch (e) { fail(2, `OATH_REGISTRY_AUTH is not valid JSON${/position (\d+)/.exec(e.message) ? ` (near character ${/position (\d+)/.exec(e.message)[1]})` : ""}. Expected {"<registry host>":{"username":"…","password":"…"}}; check for stray quotes, line breaks, or a " or \\ inside the password.`); }
+};
 
 async function resolveTarget() {
   const direct = arg("digest");

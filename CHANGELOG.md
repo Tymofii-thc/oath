@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A malformed `OATH_REGISTRY_AUTH` is reported as exactly that (with the character position, never the value) instead of "cannot get the digest".
+
 ## 0.3.2
 
 - `oath --help` explains every command; `oath <command> --help` lists its options; `oath --version`. An unknown command exits 2 with the command list.
