@@ -214,10 +214,10 @@
           <p class="muted" data-i18n="cli_p">Exit codes: 0 verified, 1 not verified, 2 error.</p>
           <div class="code-wrap"><button type="button" class="copy" data-copy="code-cli" data-i18n="copy">Copy</button>
 <pre class="code-block" id="code-cli"><code># once: create and fund the CI key
-npx --yes --allow-git=all github:Tymofii-thc/oath init
+npx --yes oath-verify init
 
 # check an image
-npx --yes --allow-git=all github:Tymofii-thc/oath verify --signer &lt;pubkey&gt; --image ghcr.io/me/app:latest</code></pre></div>
+npx --yes oath-verify verify --signer &lt;pubkey&gt; --image ghcr.io/me/app:latest</code></pre></div>
         </div>
       </div>
       <p class="links-row">

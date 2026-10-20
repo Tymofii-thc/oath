@@ -24,13 +24,13 @@ deploy ──► docker pull ──► oath verify ──► ✔ exit 0  → dep
                                          ✘ exit 1  → deploy stopped
 ```
 
-`oath` below means `node bin/oath.mjs` (or `npx --yes --allow-git=all github:Tymofii-thc/oath`).
+`oath` below means `node bin/oath.mjs` (or `npx --yes oath-verify`, from npm).
 
 ## Set up in 3 steps
 
 **1. A CI key** (once, about a minute):
 ```bash
-npx --yes --allow-git=all github:Tymofii-thc/oath init      # or: node bin/oath.mjs init  in a clone
+npx --yes oath-verify init      # or: node bin/oath.mjs init  in a clone
 ```
 `oath init` creates a key in `.oath/ci-key.json` (the secret is never printed and `.oath/` goes into `.gitignore`), asks the devnet faucet for SOL, and if the public faucet refuses (it often does) it prints the link and **waits until you've funded the key**. It then prints exactly what to add to your repository: the secret `SOLANA_SECRET_KEY`, the variable `OATH_SIGNER`, and the two workflow steps below. With the GitHub CLI installed and logged in, `oath init --set-github` sets the secret and variable for you (checked with a real `gh` on a throwaway private repository).
 

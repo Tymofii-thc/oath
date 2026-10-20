@@ -19,7 +19,7 @@ Or use the browser verifier: https://tymofii-thc.github.io/oath/ (the two button
 
 ## 2. Fifteen minutes: put it in your own repository
 ```bash
-npx --yes --allow-git=all github:Tymofii-thc/oath init     # creates .oath/ci-key.json, funds it, prints the next steps
+npx --yes oath-verify init     # creates .oath/ci-key.json, funds it, prints the next steps
 ```
 If the public devnet faucet refuses, `init` prints a link (https://faucet.solana.com, choose devnet) and waits for you to fund the key. Then add what it prints to your repository (a secret and a variable), and add two steps to a workflow that builds and pushes a container image:
 

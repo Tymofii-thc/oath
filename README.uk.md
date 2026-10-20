@@ -28,7 +28,7 @@ deploy ──► docker pull ──► oath verify ──► ✔ exit 0  → д�
 
 **1. Ключ CI** (один раз, приблизно хвилина):
 ```bash
-npx --yes --allow-git=all github:Tymofii-thc/oath init      # або: node bin/oath.mjs init  у клоні
+npx --yes oath-verify init      # або: node bin/oath.mjs init  у клоні
 ```
 `oath init` створює ключ у `.oath/ci-key.json` (секрет не друкується, а `.oath/` потрапляє в `.gitignore`), просить у devnet-faucet SOL, а якщо публічний faucet відмовив (так буває часто), друкує посилання і **чекає, поки ти поповниш ключ**. Потім друкує, що саме додати в репозиторій: секрет `SOLANA_SECRET_KEY`, змінну `OATH_SIGNER` і два кроки workflow нижче. Якщо встановлено GitHub CLI і ти залогінений, `oath init --set-github` додасть секрет і змінну сам (перевірено зі справжнім `gh` на тимчасовому приватному репозиторії).
 
