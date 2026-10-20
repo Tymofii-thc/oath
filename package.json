@@ -1,22 +1,55 @@
 {
-  "name": "oath",
-  "version": "0.1.0",
-  "description": "Anchor Docker image digests to Solana devnet from CI and verify what runs in prod",
-  "main": "index.js",
+  "name": "oath-verify",
+  "version": "0.2.0",
+  "description": "Record a Docker image digest on Solana from CI and block deploys of images the pipeline did not build (CLI, Kubernetes admission webhook, GitHub Action)",
   "scripts": {
     "test": "node --test test/*.test.mjs"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "solana",
+    "supply-chain",
+    "docker",
+    "provenance",
+    "kubernetes",
+    "admission-webhook",
+    "sigstore",
+    "ci"
+  ],
+  "author": "Tymofii-thc",
   "license": "MIT",
   "type": "module",
   "dependencies": {
     "sigstore": "^5.0.0"
   },
   "bin": {
-    "oath": "bin/oath.mjs"
+    "oath": "bin/oath.mjs",
+    "oath-verify": "bin/oath.mjs"
   },
   "optionalDependencies": {
     "@solana/web3.js": "^1.99.0"
+  },
+  "files": [
+    "bin/oath.mjs",
+    "bin/oath-webhook.mjs",
+    "lib",
+    "scripts",
+    "README.md",
+    "THREAT-MODEL.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tymofii-thc/oath.git"
+  },
+  "homepage": "https://tymofii-thc.github.io/oath/",
+  "bugs": {
+    "url": "https://github.com/Tymofii-thc/oath/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
