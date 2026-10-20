@@ -292,6 +292,7 @@ tbody th { font-weight: 500; width: 34%; }
 .stack { display: grid; gap: 16px; max-width: 720px; padding-bottom: 72px; }
 .warn-note { margin: 0; border: 1px solid var(--warn); border-radius: var(--radius); padding: 12px 16px; font-size: 0.9375rem; }
 .wallet-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.wallet-row select { width: auto; min-width: 140px; }
 .addr { overflow-wrap: anywhere; }
 .panel .code-block { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 3.5rem; }
 .panel .label-s { font-size: 0.8125rem; color: var(--muted); font-weight: 500; margin: 0 0 -6px; }

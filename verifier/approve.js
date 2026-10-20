@@ -24,6 +24,7 @@
       ap_lead: 'Sign one Memo transaction as the second signer (--quorum 2). Your private key never leaves the wallet. Tested with Phantom; other wallets are untested.',
       ap_warn: 'Compare the digest with the CI log of the build you approve. An unchecked approval defeats the purpose.',
       ap_connect: 'Connect wallet',
+      ap_wallet_other: 'Other wallet',
       ap_not_connected: 'not connected',
       ap_mode: 'Action',
       ap_mode_approve: 'Approve a build',
@@ -64,6 +65,7 @@
       ap_lead: 'Підпишіть одну Memo-транзакцію як другий підписант (--quorum 2). Приватний ключ не залишає гаманець. Перевірено з Phantom; інші гаманці не перевірялися.',
       ap_warn: 'Звірте digest із журналом CI збірки, яку затверджуєте. Затвердження без перевірки втрачає сенс.',
       ap_connect: 'Підключити гаманець',
+      ap_wallet_other: 'Інший гаманець',
       ap_not_connected: 'не підключено',
       ap_mode: 'Дія',
       ap_mode_approve: 'Затвердити збірку',
@@ -130,13 +132,32 @@
     $('a-sign').disabled = !wallet || !!b.error;
   }
 
-  function findProvider() {
-    return (window.phantom && window.phantom.solana) || window.solflare || window.backpack || window.solana || null;
+  /* Every injected Solana wallet, not just the first: with Phantom and Solflare both installed, Phantom used to win silently. */
+  function findProviders() {
+    const cands = [
+      ['Phantom', window.phantom && window.phantom.solana],
+      ['Solflare', window.solflare],
+      ['Backpack', window.backpack],
+      [t('ap_wallet_other'), window.solana],
+    ];
+    const seen = new Set(), out = [];
+    for (const [name, p] of cands) if (p && !seen.has(p)) { seen.add(p); out.push({ name, p }); }
+    return out;
+  }
+
+  function fillPicker() {
+    const list = findProviders(), pick = $('a-pick'), prev = pick.value;
+    pick.replaceChildren();
+    list.forEach((w, i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = w.name; pick.appendChild(o); });
+    if (prev && Number(prev) < list.length) pick.value = prev;
+    pick.hidden = list.length < 2; // a choice only when there is one
+    return list;
   }
 
   async function connect() {
-    provider = findProvider();
-    if (!provider) { show('bad', [['ap_nowallet']]); return; }
+    const list = fillPicker();
+    if (!list.length) { show('bad', [['ap_nowallet']]); return; }
+    provider = list[Number($('a-pick').value) || 0].p;
     try {
       const res = await provider.connect();
       const pk = (res && res.publicKey) || provider.publicKey;
@@ -239,6 +260,8 @@
     if (q.get('mode') === 'revoke') $('a-mode').value = 'revoke';
     for (const id of ['a-mode', 'a-image', 'a-commit', 'a-digest', 'a-reason', 'a-net']) $(id).addEventListener('input', refresh);
     $('a-connect').addEventListener('click', connect);
+    window.addEventListener('load', fillPicker); // wallets inject their provider late
+    $('a-pick').addEventListener('change', () => { wallet = null; provider = null; const w = $('a-wallet'); w.setAttribute('data-i18n', 'ap_not_connected'); w.textContent = t('ap_not_connected'); refresh(); });
     $('aform').addEventListener('submit', sign);
     for (const b of document.querySelectorAll('.lang [data-lang]')) b.addEventListener('click', () => applyLang(b.dataset.lang));
     const ql = (q.get('lang') || '').toLowerCase();
