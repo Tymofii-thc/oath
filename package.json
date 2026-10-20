@@ -1,6 +1,6 @@
 {
   "name": "oath-verify",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Record a Docker image digest on Solana from CI and block deploys of images the pipeline did not build (CLI, Kubernetes admission webhook, GitHub Action)",
   "scripts": {
     "test": "node --test test/*.test.mjs"
