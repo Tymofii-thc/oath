@@ -336,7 +336,17 @@
 
   /* getSignaturesForAddress also lists transactions that merely mention the address (anyone can add it as a read-only
      account next to a memo they signed themselves), so a record counts only if the signer really signed the transaction. */
-  async function signedBy(net, key, sig) {
+  const signedCache = new Map(); // a confirmed transaction never changes: ask once per page load (the public RPC rate-limits bursts)
+  function signedBy(net, key, sig) {
+    const id = net + ':' + key + ':' + sig;
+    if (!signedCache.has(id)) {
+      const p = signedByUncached(net, key, sig);
+      signedCache.set(id, p);
+      p.catch(() => signedCache.delete(id));
+    }
+    return signedCache.get(id);
+  }
+  async function signedByUncached(net, key, sig) {
     const t = await rpcCall(net, 'getTransaction', [sig, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }]);
     const keys = (t && t.transaction && t.transaction.message && t.transaction.message.accountKeys) || [];
     return !!t && !(t.meta && t.meta.err) && keys.some((k) => k.pubkey === key && k.signer === true);
@@ -655,13 +665,6 @@
       };
     }
     renderTerminal(true);
-
-    // the table gets the other records once their signatures are checked (does not delay the verdict)
-    verifyRest(v.net, res.ok).then((extra) => {
-      if (seq !== state.seq || !extra.length) return;
-      state.records = { ...state.records, rows: sortedRecords([{ records: [...rows, ...extra] }]) };
-      renderRecords();
-    }).catch(() => {});
   }
 
   async function loadRecords() {
