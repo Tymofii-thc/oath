@@ -50,7 +50,7 @@ npx --yes oath-verify init      # або: node bin/oath.mjs init  у клоні
 ```
 Action сам тягне образ і валить job (код 1), якщо для digest нема запису. Необов'язкові входи: `network`, `rpc`, `quorum`, `max-age`, `attest`, або `digest` замість `image`.
 
-Цей репозиторій використовує сам себе так: див. `.github/workflows/deploy.yml`. Покроковий гайд для тестування: [TESTING.md](TESTING.md).
+Повний мінімальний workflow (близько 40 рядків): [`examples/github-minimal.yml`](examples/github-minimal.yml). Додатковий захист поверх нього (походження збірки SLSA, потрібне для `--attest`, SBOM і скан Trivy) є в [`deploy.yml`](.github/workflows/deploy.yml) цього репозиторію. Покроковий гайд для тестування: [TESTING.md](TESTING.md).
 
 ## CLI
 ```bash

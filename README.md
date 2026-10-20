@@ -52,7 +52,7 @@ npx --yes oath-verify init      # or: node bin/oath.mjs init  in a clone
 ```
 The action pulls the image and fails the job (exit 1) if the digest has no record. Optional inputs: `network`, `rpc`, `quorum`, `max-age`, `attest` (see below), or `digest` instead of `image`.
 
-This repository dogfoods the same flow: see `.github/workflows/deploy.yml`. Step-by-step testing guide: [TESTING.md](TESTING.md).
+A complete minimal workflow (about 40 lines): [`examples/github-minimal.yml`](examples/github-minimal.yml). Optional hardening on top of it, such as SLSA build provenance (needed for `--attest`), an SBOM and a Trivy scan, is in this repository's own [`deploy.yml`](.github/workflows/deploy.yml). Step-by-step testing guide: [TESTING.md](TESTING.md).
 
 ## CLI
 ```bash

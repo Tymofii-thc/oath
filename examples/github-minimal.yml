@@ -1,0 +1,47 @@
+# The smallest complete workflow: build, record the digest on Solana, verify before deploy.
+# Setup once: `npx --yes oath-verify init`, then add the secret SOLANA_SECRET_KEY and the variable OATH_SIGNER
+# (init prints both; `--set-github` does it for you if you have the gh CLI).
+name: build-and-deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - id: build
+        uses: docker/build-push-action@v6
+        with: { context: ., push: true, tags: "${{ steps.meta.outputs.image }}:latest" }
+
+      - uses: Tymofii-thc/oath@v0.2.0          # record the digest
+        with:
+          image: ${{ steps.meta.outputs.image }}
+          digest: ${{ steps.build.outputs.digest }}
+          secret-key: ${{ secrets.SOLANA_SECRET_KEY }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+
+      - uses: Tymofii-thc/oath/verify@v0.2.0   # fails the job if the image was not built by the pipeline
+        with:
+          signer: ${{ vars.OATH_SIGNER }}
+          image: ${{ needs.build.outputs.image }}:latest
+
+      - run: echo "Replace this with your real deploy."
