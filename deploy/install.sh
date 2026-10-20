@@ -56,7 +56,12 @@ if [ -n "$OATH_AUDIT_SCHEDULE" ] && [ "$OATH_AUDIT_SCHEDULE" != off ]; then
   first="oath-audit-first-$(date +%s)"
   if kubectl -n "$ns" create job "$first" --from=cronjob/oath-audit >/dev/null; then
     echo "Auditing the Pods that are already running..."
-    kubectl -n "$ns" wait --for=condition=complete "job/$first" --timeout=120s >/dev/null 2>&1 || true
+    # a Job that finds a bad image ends Failed, so "wait for complete" would sit out its whole timeout: poll for either end state
+    for _ in $(seq 1 60); do
+      st="$(kubectl -n "$ns" get "job/$first" -o jsonpath='{.status.succeeded}{.status.failed}' 2>/dev/null || true)"
+      [ -n "$st" ] && break
+      sleep 2
+    done
     kubectl -n "$ns" logs "job/$first" 2>/dev/null || true
     kubectl -n "$ns" delete job "$first" --ignore-not-found >/dev/null 2>&1 || true
   fi
