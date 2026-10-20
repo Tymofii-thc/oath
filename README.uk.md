@@ -57,7 +57,9 @@ Action сам тягне образ і валить job (код 1), якщо д�
 node bin/oath.mjs verify --signer <pubkey> --digest sha256:…
 node bin/oath.mjs verify --signer <pubkey> --image ghcr.io/me/app:latest
 node bin/oath.mjs verify --signer <pubkey> --container prod      # образ, що ЗАРАЗ працює
+node bin/oath.mjs anchor --image ghcr.io/me/app:latest           # запис збірки з будь-якого CI (SOLANA_SECRET_KEY; digest бере з реєстру, docker не потрібен)
 ```
+`verify --image repo@sha256:…` не потребує ні docker, ні звернення до реєстру. Якщо образу немає локально, digest тега береться з реєстру (приватні: `OATH_REGISTRY_AUTH`). Приклади для CI: [`examples/github-minimal.yml`](examples/github-minimal.yml) і [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) (Azure не перевірено на живому pipeline).
 Коди виходу: `0` перевірено, `1` не перевірено, `2` помилка (мережа, аргументи). Для мейннету додай `--rpc <url>` або змінну `SOLANA_RPC` (і те саме для кроку 2 через вхід `rpc`).
 
 `verifier/index.html` це та сама перевірка у браузері, для демо й для людей, які не лізуть у термінал. Живий: https://tymofii-thc.github.io/oath/

@@ -1,0 +1,40 @@
+# oath in Azure DevOps. NOT tested on a live Azure DevOps pipeline: written from the docs and from running the same commands locally.
+# Setup once: `npx --yes oath-verify init`, then a variable group "oath" (Pipelines > Library) with
+#   SOLANA_SECRET_KEY  (lock icon = secret): the contents of .oath/ci-key.json
+#   OATH_SIGNER        : the public key init printed
+#   OATH_REGISTRY_AUTH (lock icon = secret): {"<acr>.azurecr.io":{"username":"<acr user or token name>","password":"<password>"}}
+# Secret variables are NOT passed to scripts automatically: each one used below is mapped in `env`.
+trigger:
+  - master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - group: oath
+  - name: image
+    value: conre02.azurecr.io/containers-01/my-container-snake-devops
+
+steps:
+  - task: Docker@2
+    displayName: Build and push
+    inputs:
+      containerRegistry: connection-docker-conre02
+      repository: containers-01/my-container-snake-devops
+      command: buildAndPush
+      Dockerfile: Dockerfile
+      tags: $(Build.BuildId)
+
+  - script: npx --yes oath-verify anchor --image $(image):$(Build.BuildId)   # digest from the registry, commit from BUILD_SOURCEVERSION
+    displayName: Record the digest on Solana
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
+    env:
+      SOLANA_SECRET_KEY: $(SOLANA_SECRET_KEY)
+      OATH_REGISTRY_AUTH: $(OATH_REGISTRY_AUTH)
+
+  - script: npx --yes oath-verify verify --signer $(OATH_SIGNER) --image $(image):$(Build.BuildId)
+    displayName: Verify before deploy (a non-zero exit stops the pipeline)
+    env:
+      OATH_REGISTRY_AUTH: $(OATH_REGISTRY_AUTH)
+
+  # your deploy goes here, e.g. az containerapp update --image $(image):$(Build.BuildId) ...

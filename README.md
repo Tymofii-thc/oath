@@ -60,8 +60,11 @@ oath verify --signer <pubkey> --digest sha256:…
 oath verify --signer <pubkey> --image ghcr.io/me/app:latest
 oath verify --signer <pubkey> --container prod      # the image that is running RIGHT NOW
 oath audit  --signer <pubkey>                       # every Pod running in the current kube context
+oath anchor --image ghcr.io/me/app:latest           # record a build from any CI (SOLANA_SECRET_KEY; the digest comes from the registry, no docker)
 ```
 Exit codes: `0` verified, `1` not verified, `2` error (network, arguments). Options: `--network devnet|mainnet` or `--rpc <url>`, `--max-age <days>`, `--quorum <N>`, `--attest <owner/repo>`, `--no-bind`.
+
+`verify --image repo@sha256:…` needs neither docker nor a registry call; for a tag that is not in local docker the digest is read from the registry (private ones: `OATH_REGISTRY_AUTH`). CI examples: [`examples/github-minimal.yml`](examples/github-minimal.yml) and [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) (the Azure one is not tested on a live pipeline).
 
 `verifier/` is the same check in the browser, for demos and for people who avoid the terminal.
 

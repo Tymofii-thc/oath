@@ -2,8 +2,10 @@
 // oath — Proof of Deploy CLI
 //
 //   oath verify --signer <pubkey[,pubkey…]> --digest sha256:<hex>
-//   oath verify --signer <pubkey> --image ghcr.io/me/app:latest      (digest read from local docker)
+//   oath verify --signer <pubkey> --image ghcr.io/me/app:latest      (digest read from local docker, else from the registry: OATH_REGISTRY_AUTH for private ones)
+//   oath verify --signer <pubkey> --image ghcr.io/me/app@sha256:…   (a pinned ref needs no docker and no registry call)
 //   oath verify --signer <pubkey> --container prod                   (digest of the RUNNING image)
+//   oath anchor --image ghcr.io/me/app:latest [--digest sha256:…] [--commit <sha>] [--key-file <path>]   (record a build: SOLANA_SECRET_KEY; no docker, the digest comes from the registry)
 //   oath init   [--out .oath/ci-key.json] [--approver] [--no-wait] [--set-github]      (create a CI key, fund it on devnet, print the next steps)
 //   oath revoke --digest sha256:<hex> --reason "<text>"   (SOLANA_SECRET_KEY or --key-file; a revoked digest never verifies again)
 //   oath audit  --signer <pubkey> [--file pods.json | --in-cluster] [--skip-namespaces a,b]   (every Pod running in the current kube context, or from inside a Pod)
@@ -21,6 +23,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } fr
 import { dirname } from "node:path";
 import { extractDigest, checkRecord, repoName, resolveRpc } from "../lib/oath.mjs";
 import { sendMemo } from "../lib/memo.mjs";
+import { resolveDigest } from "../lib/registry.mjs";
 import { collectImages, listPodsInCluster } from "../lib/audit.mjs";
 import { verifyAttestation } from "../lib/attest.mjs";
 
@@ -51,7 +54,9 @@ function pickRepoDigest(lines, ref) {
   return chosen ? { digest: extractDigest(chosen), repo: repoName(chosen) } : null;
 }
 
-function resolveTarget() {
+const registryAuths = () => (process.env.OATH_REGISTRY_AUTH ? JSON.parse(process.env.OATH_REGISTRY_AUTH) : {});
+
+async function resolveTarget() {
   const direct = arg("digest");
   if (direct) return { digest: extractDigest(direct), repo: null };
 
@@ -63,7 +68,19 @@ function resolveTarget() {
   }
   const image = arg("image");
   if (image) {
-    return pickRepoDigest(docker(["image", "inspect", "--format", fmt, image]), image) || { digest: null };
+    // repo@sha256:… already says which digest it is: no docker, no registry call
+    const pinned = image.match(/@(sha256:[0-9a-f]{64})$/i);
+    if (pinned) return { digest: pinned[1].toLowerCase(), repo: repoName(image) };
+    let local = null;
+    try { local = execFileSync("docker", ["image", "inspect", "--format", fmt, image], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(); } catch { /* no docker or not pulled: ask the registry */ }
+    if (local !== null) return pickRepoDigest(local, image) || { digest: null };
+    try {
+      const digest = await resolveDigest(image, { auths: registryAuths() });
+      console.error(`note: ${image} is not in local docker; the digest comes from the registry`);
+      return { digest, repo: repoName(image) };
+    } catch (e) {
+      fail(2, `cannot get the digest of ${image}: ${e.message}`);
+    }
   }
   return { digest: null };
 }
@@ -80,7 +97,7 @@ async function verify() {
     fail(2, e.message);
   }
 
-  const { digest: want, repo } = resolveTarget();
+  const { digest: want, repo } = await resolveTarget();
   if (!want) fail(2, "Could not determine a sha256 digest (no registry digest on the local image?). Pass --digest, or push/pull the image first.");
 
   const maxAgeDays = arg("max-age");
@@ -185,19 +202,54 @@ async function audit() {
   process.exit(bad ? 1 : 0);
 }
 
+// The signing key: --key-file wins over SOLANA_SECRET_KEY (a JSON array of 64 numbers).
+function readSecret() {
+  let secret = process.env.SOLANA_SECRET_KEY;
+  if (arg("key-file")) { try { secret = readFileSync(arg("key-file"), "utf8"); } catch (e) { fail(2, `cannot read key file: ${e.message}`); } }
+  if (!secret) fail(2, "Provide the signer's secret key: SOLANA_SECRET_KEY='[…]' or --key-file <path>.");
+  try { return JSON.parse(secret); } catch { fail(2, "The secret key is not valid JSON (expected a JSON array of numbers)."); }
+}
+
+// Records a build: the same memo the GitHub Action writes, but from any CI and without docker.
+async function anchor() {
+  const image = arg("image");
+  if (!image) fail(2, "Missing --image <registry/name[:tag]> (the name that goes into the record).");
+  let digest = null;
+  if (arg("digest")) { digest = extractDigest(arg("digest")); if (!digest) fail(2, "Bad --digest (expected sha256:<64 hex>)."); }
+  else digest = extractDigest(image.match(/@sha256:[0-9a-fA-F]{64}$/)?.[0]);
+  if (!digest) {
+    try { digest = await resolveDigest(image, { auths: registryAuths() }); }
+    catch (e) { fail(2, `cannot get the digest of ${image}: ${e.message} (pass --digest, or OATH_REGISTRY_AUTH for a private registry)`); }
+  }
+  let commit = arg("commit") || process.env.GITHUB_SHA || process.env.BUILD_SOURCEVERSION || process.env.CI_COMMIT_SHA || "";
+  if (!commit) { try { commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { /* not a checkout */ } }
+  commit = commit.trim().toLowerCase();
+  if (!/^[0-9a-f]{7,40}$/.test(commit)) fail(2, "Missing --commit <sha> (or set GITHUB_SHA / BUILD_SOURCEVERSION / CI_COMMIT_SHA, or run inside a git checkout).");
+  const secretKey = readSecret();
+  let rpcUrl;
+  try { rpcUrl = resolveRpc({ rpc: arg("rpc"), network: arg("network") }); } catch (e) { fail(2, e.message); }
+  const text = `pod1|${repoName(image)}|${commit.slice(0, 12)}|${digest}|${new Date().toISOString()}`;
+  try {
+    const out = await sendMemo({ text, secretKey, rpcUrl });
+    console.log(`Anchored: ${text}`);
+    console.log(`Signer  : ${out.signer}`);
+    console.log(`Tx      : ${out.signature}`);
+  } catch (e) {
+    fail(2, `could not send the record: ${e.message}`);
+  }
+}
+
 // Marks a digest as bad. Any trusted signer can do it; it takes effect for every later check.
 async function revoke() {
   const digest = extractDigest(arg("digest"));
   if (!digest) fail(2, "Missing --digest sha256:<64 hex>.");
   const reason = String(arg("reason") || "").replace(/[|\r\n]+/g, " ").trim().slice(0, 100);
-  let secret = process.env.SOLANA_SECRET_KEY;
-  if (arg("key-file")) { try { secret = readFileSync(arg("key-file"), "utf8"); } catch (e) { fail(2, `cannot read key file: ${e.message}`); } }
-  if (!secret) fail(2, "Provide the signer's secret key: SOLANA_SECRET_KEY='[…]' or --key-file <path>.");
+  const secretKey = readSecret();
   let rpcUrl;
   try { rpcUrl = resolveRpc({ rpc: arg("rpc"), network: arg("network") }); } catch (e) { fail(2, e.message); }
   const text = `pod1r|${digest}|${reason}|${new Date().toISOString()}`;
   try {
-    const out = await sendMemo({ text, secretKey: JSON.parse(secret), rpcUrl });
+    const out = await sendMemo({ text, secretKey, rpcUrl });
     console.log(`Revoked: ${text}`);
     console.log(`Signer : ${out.signer}`);
     console.log(`Tx     : ${out.signature}`);
@@ -317,7 +369,9 @@ if (cmd === "verify") {
   await init();
 } else if (cmd === "revoke") {
   await revoke();
+} else if (cmd === "anchor") {
+  await anchor();
 } else {
-  console.error("Usage: oath revoke --digest sha256:… --reason <text> [--key-file <path>] [--network …]\n       oath init [--out .oath/ci-key.json] [--approver] [--no-wait] [--set-github]\n       oath audit --signer <pubkey[,pubkey]> [--file pods.json|-] [--skip-namespaces a,b] [--network …]\n       oath verify --signer <pubkey[,pubkey]> (--digest sha256:… | --image <ref> | --container <name>) [--network devnet|mainnet | --rpc <url>] [--max-age <days>] [--quorum <N>] [--attest <owner/repo>] [--no-bind]");
+  console.error("Usage: oath anchor --image <ref> [--digest sha256:…] [--commit <sha>] [--key-file <path>] [--network …]\n       oath revoke --digest sha256:… --reason <text> [--key-file <path>] [--network …]\n       oath init [--out .oath/ci-key.json] [--approver] [--no-wait] [--set-github]\n       oath audit --signer <pubkey[,pubkey]> [--file pods.json|-] [--skip-namespaces a,b] [--network …]\n       oath verify --signer <pubkey[,pubkey]> (--digest sha256:… | --image <ref> | --container <name>) [--network devnet|mainnet | --rpc <url>] [--max-age <days>] [--quorum <N>] [--attest <owner/repo>] [--no-bind]");
   process.exit(2);
 }
