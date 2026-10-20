@@ -26,7 +26,7 @@ jobs:
         uses: docker/build-push-action@v6
         with: { context: ., push: true, tags: "${{ steps.meta.outputs.image }}:latest" }
 
-      - uses: Tymofii-thc/oath@v0.2.0          # record the digest
+      - uses: Tymofii-thc/oath@v0.3.2          # record the digest
         with:
           image: ${{ steps.meta.outputs.image }}
           digest: ${{ steps.build.outputs.digest }}
@@ -39,7 +39,7 @@ jobs:
       - uses: docker/login-action@v3
         with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
 
-      - uses: Tymofii-thc/oath/verify@v0.2.0   # fails the job if the image was not built by the pipeline
+      - uses: Tymofii-thc/oath/verify@v0.3.2   # fails the job if the image was not built by the pipeline
         with:
           signer: ${{ vars.OATH_SIGNER }}
           image: ${{ needs.build.outputs.image }}:latest
