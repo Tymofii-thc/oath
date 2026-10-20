@@ -20,7 +20,7 @@ That a container image running in your cluster (or about to be deployed) is **on
 | Edit the image of a running bare Pod, or `kubectl debug` with a foreign image | Denied: the webhook checks `UPDATE` and `pods/ephemeralcontainers` (**tested**) |
 | Move the tag between check and pull | Not possible: the webhook rewrites the tag to the verified digest (**tested**) |
 | Forge a record without the CI key: send a transaction that only *mentions* the CI address next to a Memo the attacker signed | Ignored: a record counts only if the signer actually signed the transaction (**tested live on devnet**; this was a real hole in earlier versions, see "Found in review") |
-| Steal the CI key and record a malicious digest | Passes with one key. With `--quorum 2` it also needs the approver's record (**tested** with a real Phantom). Revoke afterwards with `oath revoke` (**tested**) |
+| Steal the CI key and record a malicious digest | Passes with one key. With `--quorum 2` it also needs the approver's record (**tested** with real Phantom and Solflare). Revoke afterwards with `oath revoke` (**tested**) |
 | Honest build of malicious code (compromised dependency or developer) | Not stopped. Mitigations: `--attest` (proves *which workflow* built it), SBOM attestation, optional Trivy gate |
 | Spam the CI address with transactions to push old records out of the scanned window | Old digests stop verifying (availability). Raise `--limit` / `OATH_LIMIT`; the webhook keeps recent verifications for `OATH_STALE_OK_HOURS` |
 | Make the webhook contact arbitrary hosts via an image name (SSRF) | Limit with `OATH_ALLOWED_REGISTRIES`; registry credentials are never sent to a host outside the registry's own domain (**tested**) |
@@ -33,7 +33,7 @@ That a container image running in your cluster (or about to be deployed) is **on
 - Namespaces exempt from the webhook (`kube-system`, `kube-public`, `kube-node-lease`, the webhook's own namespace, and any labelled `oath.io/exempt=true`). Anyone who can label a namespace can exempt it: restrict that permission.
 - An attacker with cluster-admin can delete the webhook configuration.
 - Revocation is seen by the webhook after its cache expires (up to 5 minutes).
-- Mainnet is supported but not exercised in CI; Ledger and Solflare are untested (Phantom is tested).
+- Mainnet is supported but not exercised in CI; Ledger is untested (Phantom and Solflare are tested).
 
 ## Found in review
 A security review of the code (2026-10-19) found and fixed:
