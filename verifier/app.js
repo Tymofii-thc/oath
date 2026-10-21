@@ -783,12 +783,15 @@
     }
   }
 
-  /* ---------- "how it works" terminal loop (decorative; a real example is in the live verifier above) ---------- */
+  /* ---------- "how it works" terminal loop (decorative; a real example is in the live verifier above) ----------
+     Every "out" line is real, not invented: pulled verbatim (or truncated, same as shortKey/shortDigest elsewhere on
+     this page) from what bin/oath.mjs actually prints, or from a real anchored record. No install log: the package
+     count changes with sigstore's own dependency tree, so a specific number here would eventually just be wrong. */
   const FLOW_SCRIPT = [
-    { cmd: 'npm install -g oath-verify', out: [[null, 'added 1 package in 1s']] },
+    { cmd: 'npm install -g oath-verify', out: [] },
     { cmd: 'oath init', out: [
       [null, 'Created a CI key: .oath/ci-key.json'],
-      [null, 'OATH_SIGNER: 5D4W8x…hoih'],
+      [null, 'OATH_SIGNER (public, safe to share): 5D4W8x…hoih'],
     ] },
     { cmd: 'oath verify --image ghcr.io/me/app:latest', out: [
       ['good', 'VERIFIED  sha256:d9e853e8…e4b6bc'],
