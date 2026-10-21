@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>oath — admin status</title>
+<meta name="description" content="Unlisted operational status page: CI, recent changes, known gaps, key/cert/backup facts. No marketing copy.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="root.css">
+</head>
+<body>
+<header>
+  <h1>oath — admin status</h1>
+  <p class="sub">Plain facts for whoever operates this. Not a pitch. <a href="../">main site</a> · <a href="https://github.com/Tymofii-thc/oath">repo</a></p>
+</header>
+
+<main>
+
+<section>
+  <h2>CI, right now</h2>
+  <p class="note">GitHub's own badges — live, not cached by this page.</p>
+  <table class="badges">
+    <tr><td>unit + e2e-kind + e2e-pda + live-devnet</td><td><img alt="ci" src="https://github.com/Tymofii-thc/oath/actions/workflows/ci.yml/badge.svg?branch=main"></td></tr>
+    <tr><td>codeql</td><td><img alt="codeql" src="https://github.com/Tymofii-thc/oath/actions/workflows/codeql.yml/badge.svg?branch=main"></td></tr>
+    <tr><td>build-anchor-verify-deploy (dogfood)</td><td><img alt="deploy" src="https://github.com/Tymofii-thc/oath/actions/workflows/deploy.yml/badge.svg?branch=main"></td></tr>
+    <tr><td>release-webhook (image build)</td><td><img alt="release-webhook" src="https://github.com/Tymofii-thc/oath/actions/workflows/release-webhook.yml/badge.svg?branch=main"></td></tr>
+    <tr><td>pages (this site)</td><td><img alt="pages" src="https://github.com/Tymofii-thc/oath/actions/workflows/pages.yml/badge.svg?branch=main"></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>What's new</h2>
+  <p class="note">Fetched live from CHANGELOG.md on main. If this says "could not load," read it directly: <a href="https://github.com/Tymofii-thc/oath/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+  <pre id="changelog">loading…</pre>
+</section>
+
+<section>
+  <h2>Recent commits</h2>
+  <p class="note">Last 12 on main, via the GitHub API. Subject lines only — read the diff for the rest.</p>
+  <pre id="commits">loading…</pre>
+</section>
+
+<section>
+  <h2>What doesn't work / known gaps</h2>
+  <p class="note">Fetched live from THREAT-MODEL.md, "Not covered" section — verbatim, not summarized.</p>
+  <pre id="not-covered">loading…</pre>
+</section>
+
+<section>
+  <h2>What was found broken, and when</h2>
+  <p class="note">Fetched live from THREAT-MODEL.md, "Found in review" section. This is the project's own bug history, not hidden from this page.</p>
+  <pre id="found-in-review">loading…</pre>
+</section>
+
+<section>
+  <h2>Keys, certs, backups — the operational facts</h2>
+  <p class="note">Not fetched — there's no single doc section for this, so it's written here directly. If it drifts from the code, the code wins; file an issue.</p>
+  <ul class="facts">
+    <li><strong>There is no database and no server-side durable state.</strong> The only state that matters lives on Solana (public, immutable) and in key files on whoever's machine generated them. Nothing here is backed up by this project — that's the operator's job.</li>
+    <li><strong>CI signing key</strong> (<code>.oath/ci-key.json</code> or wherever <code>oath init</code> put it): if it's lost, past records anchored by it still verify (they don't depend on the key file surviving), but nothing new can be anchored under that signer until you rotate to a new one and update <code>OATH_SIGNER</code> everywhere. Losing it is not catastrophic; losing it to an attacker is (see THREAT-MODEL.md).</li>
+    <li><strong>Approver key</strong> (quorum ≥2 setups): same as above, kept off CI by design. If it's lost with no copy, quorum can never be met again for new builds until a replacement approver key is added everywhere <code>--quorum</code>/<code>OATH_SIGNER</code> is configured.</li>
+    <li><strong><code>--program</code> (on-chain records, experimental):</strong> the deployed program's upgrade authority is currently a single key (the CI key). Losing it means the program can no longer be upgraded, but existing on-chain records remain readable and valid either way.</li>
+    <li><strong>Webhook TLS certificate:</strong> 825-day lifetime, generated fresh by <code>install.sh</code>/Helm, not auto-rotated. Re-run <code>install.sh</code> (or <code>helm upgrade</code>) before it expires, or every new Pod in the cluster gets refused (<code>failurePolicy: Fail</code>).</li>
+    <li><strong>Devnet has no retention guarantee.</strong> Anything anchored there could in principle be pruned by a network reset; this has not happened to this project's own fixtures so far, but it is not a promise. Mainnet is the durable option and is supported, but not yet exercised in CI (README: Mainnet).</li>
+  </ul>
+</section>
+
+<footer>
+  <p>This page is unlisted, not access-controlled: nothing on it is secret, it's just not meant for the homepage. Generated client-side on load, no build step, no server. Source: <a href="https://github.com/Tymofii-thc/oath/tree/main/verifier/root">verifier/root/</a>.</p>
+</footer>
+
+</main>
+<script src="root.js" defer></script>
+</body>
+</html>

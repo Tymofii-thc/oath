@@ -178,6 +178,7 @@ SOLANA_SECRET_KEY="$(cat .oath/ci-key.json)" demo/demo.sh     # needs docker and
 Expect `VERIFIED` with exit code 0, then `NOT VERIFIED` with exit code 1. The same two checks are one click each in the [live verifier](https://tymofii-thc.github.io/oath/).
 
 ## More
+- **Admin status page: https://tymofii-thc.github.io/oath/root/** — live CI badges, the actual CHANGELOG.md/THREAT-MODEL.md content (fetched, not duplicated), recent commits, and the key/cert/backup facts an operator needs. No marketing copy. Not linked from the homepage, not access-controlled either — nothing on it is secret, it's just not for visitors.
 - [THREAT-MODEL.md](THREAT-MODEL.md): attacks, what happens, what is not covered, and what a security review of the code found and fixed (including a forgery hole, reproduced and closed).
 - The webhook checks `UPDATE` too (editing a running Pod's image, `kubectl debug`), exposes Prometheus metrics at `/metrics`, and has optional `OATH_ALLOWED_REGISTRIES` (comma-separated registries it may contact) and `OATH_LIMIT` (transactions scanned per signer).
 - **`OATH_ALLOWED_REGISTRIES` is empty (any host) by default, and that is an SSRF surface**, not a theoretical one: anyone who can create a Pod picks the image field, and the webhook resolves it. The webhook warns loudly on startup if it is unset; set it to the registries you actually use (`install.sh`: `OATH_ALLOWED_REGISTRIES=ghcr.io,myregistry.azurecr.io`; Helm: `allowedRegistries`). See THREAT-MODEL.md for the full attack row.
