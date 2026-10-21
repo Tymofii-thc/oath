@@ -837,7 +837,7 @@
     { cmd: 'oath init', out: [
       [null, 'Created a CI key: .oath/ci-key.json'],
       [null, 'Public key (OATH_SIGNER, safe to share):'],
-      [null, '  5D4W8x8UeqW3qVi9uzNzvJPWiJZQaRWVR9ru2ckFhoih'],
+      [null, '  5D4W8x8UeqW3…ckFhoih'],
     ] },
     { cmd: 'oath verify --image ghcr.io/me/app:latest', out: [
       ['good', 'VERIFIED  sha256:d9e853e8…e4b6bc'],
