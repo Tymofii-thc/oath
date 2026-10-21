@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyAttestation } from "../lib/attest.mjs";
+import { verifyAttestation, parseAttestSpec } from "../lib/attest.mjs";
 
 const HEX = "a".repeat(64);
 const D = "sha256:" + HEX;
@@ -49,4 +49,47 @@ test("rejects a non-SLSA predicate", async () => {
 
 test("API errors throw (fail closed, never 'verified')", async () => {
   await assert.rejects(() => verifyAttestation({ ...args, fetchImpl: api([], 500), verifyImpl: good }));
+});
+
+const signedBy = (san) => async () => ({ identity: { subjectAlternativeName: san } });
+const SAN = (path, ref) => `https://github.com/me/app/${path}@${ref}`;
+
+test("parseAttestSpec: plain repo, workflow, ref, and bad input", () => {
+  assert.deepEqual(parseAttestSpec("me/app"), { repo: "me/app", workflow: null, ref: null });
+  assert.deepEqual(parseAttestSpec("me/app/.github/workflows/deploy.yml@refs/heads/main"), { repo: "me/app", workflow: ".github/workflows/deploy.yml", ref: "refs/heads/main" });
+  assert.deepEqual(parseAttestSpec("me/app/deploy.yml@refs/tags/v1.0.0"), { repo: "me/app", workflow: ".github/workflows/deploy.yml", ref: "refs/tags/v1.0.0" });
+  assert.deepEqual(parseAttestSpec("me/app@refs/heads/main"), { repo: "me/app", workflow: null, ref: "refs/heads/main" });
+  assert.throws(() => parseAttestSpec("me/app@main"), /full ref/);
+  assert.throws(() => parseAttestSpec("justone"), /bad attestation requirement/);
+});
+
+test("a pinned workflow and ref accept exactly that workflow on exactly that ref", async () => {
+  const spec = "me/app/.github/workflows/deploy.yml@refs/heads/main";
+  const ok = await verifyAttestation({ ...args, repo: spec, fetchImpl: api([bundle(stmt())]), verifyImpl: signedBy(SAN(".github/workflows/deploy.yml", "refs/heads/main")) });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.ref, "refs/heads/main");
+});
+
+test("a pinned ref rejects a feature branch, a pull request and a tag of the same workflow", async () => {
+  for (const ref of ["refs/heads/evil", "refs/pull/7/merge", "refs/tags/v1"]) {
+    const r = await verifyAttestation({ ...args, repo: "me/app/deploy.yml@refs/heads/main", fetchImpl: api([bundle(stmt())]), verifyImpl: signedBy(SAN(".github/workflows/deploy.yml", ref)) });
+    assert.equal(r.ok, false, ref);
+    assert.match(r.reason, /refs\/heads\/main is required/);
+  }
+});
+
+test("a pinned workflow rejects another workflow file of the same repository", async () => {
+  const r = await verifyAttestation({ ...args, repo: "me/app/deploy.yml", fetchImpl: api([bundle(stmt())]), verifyImpl: signedBy(SAN(".github/workflows/random.yml", "refs/heads/main")) });
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /random\.yml.*deploy\.yml is required/);
+});
+
+test("the loose form (owner/repo) still accepts any workflow on any ref, as before", async () => {
+  const r = await verifyAttestation({ ...args, fetchImpl: api([bundle(stmt())]), verifyImpl: signedBy(SAN(".github/workflows/anything.yml", "refs/heads/feature")) });
+  assert.equal(r.ok, true);
+});
+
+test("a repository whose name merely starts with the required one is not accepted", async () => {
+  const r = await verifyAttestation({ ...args, fetchImpl: api([bundle(stmt())]), verifyImpl: signedBy("https://github.com/me/app-evil/.github/workflows/deploy.yml@refs/heads/main") });
+  assert.equal(r.ok, false);
 });

@@ -150,3 +150,9 @@ test("verify --max-age together with --program is an error, not silently ignored
   assert.equal(r.code, 2, r.out + r.err);
   assert.match(r.err, /--max-age does not work with --program/);
 });
+
+test("verify --attest with a malformed requirement exits 2 before any network call", async () => {
+  const r = await cli(["verify", "--signer", SIGNER, "--digest", D, "--attest", "me/app@main", "--rpc", "http://127.0.0.1:9"]);
+  assert.equal(r.code, 2, r.out + r.err);
+  assert.match(r.err, /full ref/);
+});

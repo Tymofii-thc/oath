@@ -26,7 +26,7 @@ import { extractDigest, checkRecord, repoName, resolveRpc } from "../lib/oath.mj
 import { sendMemo } from "../lib/memo.mjs";
 import { resolveDigest } from "../lib/registry.mjs";
 import { collectImages, listPodsInCluster } from "../lib/audit.mjs";
-import { verifyAttestation } from "../lib/attest.mjs";
+import { verifyAttestation, parseAttestSpec } from "../lib/attest.mjs";
 
 function arg(name) {
   const i = process.argv.indexOf(`--${name}`);
@@ -115,6 +115,7 @@ async function verify() {
   const maxAgeDays = arg("max-age");
   const quorum = Number(arg("quorum") || process.env.OATH_QUORUM || 1);
   const attestRepo = arg("attest") || process.env.OATH_ATTEST_REPO;
+  if (attestRepo) { try { parseAttestSpec(attestRepo); } catch (e) { fail(2, e.message); } }
   // --program: experimental account-based backend (program/oath_records) instead of scanning transaction
   // history. Closes the revocation-eviction-by-spam gap in THREAT-MODEL.md, at the cost of needing
   // @solana/web3.js and a deployed program. Opt-in only: every existing invocation is unaffected.
@@ -485,7 +486,7 @@ const HELP = {
       ["--container <name>", "the image a running docker container uses"],
       ["--quorum <N>", "at least N different signers must have recorded it"],
       ["--max-age <days>", "ignore records older than this (Memo backend only)"],
-      ["--attest <owner/repo>", "also require the Sigstore build attestation from that repository"],
+      ["--attest <spec>", "also require the Sigstore build attestation: owner/repo, or pin it with owner/repo/workflow.yml@refs/heads/main"],
       ["--no-bind", "do not require the record's image name to match the image"],
       ["--program <id>", "experimental: check the oath_records program instead of scanning Memo transaction history (or OATH_PROGRAM); see README"],
       ...NETWORK],

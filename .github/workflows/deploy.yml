@@ -106,7 +106,7 @@ jobs:
           signer: ${{ vars.OATH_SIGNER }}
           image: ${{ env.IMAGE }}:latest
           rpc: ${{ vars.SOLANA_RPC }}
-          attest: ${{ github.repository }}
+          attest: ${{ github.repository }}/.github/workflows/deploy.yml@refs/heads/main
 
       - name: Deploy
         run: echo "Image verified. Replace this step with your real deploy (kubectl / ssh / compose)."

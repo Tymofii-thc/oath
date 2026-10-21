@@ -31,7 +31,7 @@ inputs:
     description: Reject records older than this many days
     required: false
   attest:
-    description: owner/repo whose GitHub Actions must have signed a Sigstore build attestation for the image
+    description: owner/repo whose GitHub Actions must have signed a Sigstore build attestation for the image. Pin the workflow and ref with owner/repo/workflow.yml@refs/heads/main (a plain owner/repo accepts any workflow and any ref)
     required: false
 
 runs:

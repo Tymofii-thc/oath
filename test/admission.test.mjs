@@ -252,3 +252,8 @@ test("pin phase never holds a Pod back: a slow registry means allow without a pa
   const v = await slow(pod(["ghcr.io/me/app:v1"]), "verdict");
   assert.equal(v.response.allowed, false, "the verdict phase still fails closed on a timeout");
 });
+
+test("a malformed attestation requirement stops the handler from being built", () => {
+  assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "x", attestRepo: "me/app@main", deps }), /full ref/);
+  assert.doesNotThrow(() => makeHandler({ signers: ["S"], rpcUrl: "x", attestRepo: "me/app/deploy.yml@refs/heads/main", deps }));
+});
