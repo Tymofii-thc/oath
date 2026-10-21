@@ -33,4 +33,19 @@ kubectl -n oath-system wait --for=delete pod -l app=oath-webhook --timeout=60s >
 kubectl run down --image="$BAD_IMAGE" --restart=Never >/dev/null 2>&1; check "webhook down => fail closed (denied)" 1 $?
 kubectl run down2 --image="$OK_IMAGE" --restart=Never >/dev/null 2>&1; check "webhook down => even anchored image denied" 1 $?
 
+# OATH_PROGRAM (experimental, README: "On-chain records"): the real devnet-deployed program, in the real
+# shipped Docker image, inside a real cluster. The fixtures are the same ones test/live-devnet-pda.mjs
+# uses, anchored/revoked live on devnet during development — real on-chain state, not a mock. Anchored by
+# a different key than $OATH_SIGNER (this project's CI key for the Memo path): the webhook is reinstalled
+# with that signer for this section.
+PDA_PROG=6n6fJ6WQgSQFie6BQHfGxFgw9groqusUgwC48Y7hgpJq
+PDA_SIGNER=66RLA5s2R3XHGG7KPzcEWqitDZ3bbBDcb2XPhDgNw7uj
+PDA_IMG=ghcr.io/tymofii-thc/oath-records-devnet-check
+PDA_OK="sha256:$(printf 'd%.0s' $(seq 1 64))"       # anchored, never revoked
+PDA_REVOKED="sha256:$(printf 'e%.0s' $(seq 1 64))"  # anchored, then revoked
+OATH_SIGNER=$PDA_SIGNER OATH_IMAGE=oath:e2e OATH_PROGRAM=$PDA_PROG "$root/deploy/install.sh" >/dev/null 2>&1
+kubectl -n oath-system rollout status deploy/oath-webhook --timeout=60s >/dev/null 2>&1
+kubectl run pda-ok --image="$PDA_IMG@$PDA_OK" --restart=Never >/dev/null 2>&1; check "OATH_PROGRAM: anchored (never revoked) digest admitted" 0 $?
+kubectl run pda-revoked --image="$PDA_IMG@$PDA_REVOKED" --restart=Never >/dev/null 2>&1; check "OATH_PROGRAM: revoked digest denied" 1 $?
+
 [ $fails -eq 0 ] && echo "ALL PASSED" || { echo "$fails FAILED"; exit 1; }

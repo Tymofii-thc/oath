@@ -5,11 +5,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkPda, deriveRecordAddress, deriveRevokeAddress, _internal } from "../lib/pda.mjs";
 
-const { Keypair, SystemProgram } = await import("@solana/web3.js");
-const PROGRAM_ID = SystemProgram.programId.toBase58(); // any valid base58 pubkey works for derivation; no live chain involved
+// @solana/web3.js is an optional dependency (same as everywhere else that needs it: oath init, anchor
+// --program, …). `npm ci --omit=optional` must still pass `npm test` as a whole, so the tests below that
+// need it are individually skipped rather than letting a top-level import crash the whole file.
+let web3 = null;
+try { web3 = await import("@solana/web3.js"); } catch { /* skip handled per test below */ }
+const skip = web3 ? false : "@solana/web3.js is not installed";
+const PROGRAM_ID = web3 ? web3.SystemProgram.programId.toBase58() : null; // any valid base58 pubkey works for derivation; no live chain involved
 const D1 = "sha256:" + "a".repeat(64);
-const SIGNER_A = Keypair.generate().publicKey.toBase58();
-const SIGNER_B = Keypair.generate().publicKey.toBase58();
+const SIGNER_A = web3 ? web3.Keypair.generate().publicKey.toBase58() : null;
+const SIGNER_B = web3 ? web3.Keypair.generate().publicKey.toBase58() : null;
 
 test("commitBytes round-trips a commit that ends in the digit 0 (regression: '0'-padding used to strip it)", () => {
   const encoded = _internal.commitBytes("abc1230000");
@@ -52,12 +57,12 @@ async function revokeAccount({ signer, digest, reason, ts = 1 }) {
   return { data };
 }
 
-test("missing when neither a record nor a revoke account exists", async () => {
+test("missing when neither a record nor a revoke account exists", { skip }, async () => {
   const r = await checkPda({ connection: stubConnection({}), programId: PROGRAM_ID, signers: [SIGNER_A], digest: D1 });
   assert.equal(r.status, "missing");
 });
 
-test("verified when the record account exists and the image matches", async () => {
+test("verified when the record account exists and the image matches", { skip }, async () => {
   const recAddr = (await deriveRecordAddress({ programId: PROGRAM_ID, signer: SIGNER_A, digest: D1 })).toBase58();
   const conn = stubConnection({ [recAddr]: await recordAccount({ signer: SIGNER_A, digest: D1, image: "ghcr.io/me/app", commit: "0123456789ab" }) });
   const r = await checkPda({ connection: conn, programId: PROGRAM_ID, signers: [SIGNER_A], digest: D1, image: "ghcr.io/me/app" });
@@ -65,14 +70,14 @@ test("verified when the record account exists and the image matches", async () =
   assert.equal(r.rec.commit, "0123456789ab");
 });
 
-test("image binding: the same digest recorded for a different image does not verify", async () => {
+test("image binding: the same digest recorded for a different image does not verify", { skip }, async () => {
   const recAddr = (await deriveRecordAddress({ programId: PROGRAM_ID, signer: SIGNER_A, digest: D1 })).toBase58();
   const conn = stubConnection({ [recAddr]: await recordAccount({ signer: SIGNER_A, digest: D1, image: "ghcr.io/me/other", commit: "0123456789ab" }) });
   const r = await checkPda({ connection: conn, programId: PROGRAM_ID, signers: [SIGNER_A], digest: D1, image: "ghcr.io/me/app" });
   assert.equal(r.status, "missing");
 });
 
-test("revoked wins even when a record account for the same digest also exists", async () => {
+test("revoked wins even when a record account for the same digest also exists", { skip }, async () => {
   const recAddr = (await deriveRecordAddress({ programId: PROGRAM_ID, signer: SIGNER_A, digest: D1 })).toBase58();
   const revAddr = (await deriveRevokeAddress({ programId: PROGRAM_ID, signer: SIGNER_A, digest: D1 })).toBase58();
   const conn = stubConnection({
@@ -84,7 +89,7 @@ test("revoked wins even when a record account for the same digest also exists", 
   assert.equal(r.reason, "stolen build");
 });
 
-test("quorum: needs N distinct signers, each with their own record account", async () => {
+test("quorum: needs N distinct signers, each with their own record account", { skip }, async () => {
   const addrA = (await deriveRecordAddress({ programId: PROGRAM_ID, signer: SIGNER_A, digest: D1 })).toBase58();
   const addrB = (await deriveRecordAddress({ programId: PROGRAM_ID, signer: SIGNER_B, digest: D1 })).toBase58();
   const oneSigner = stubConnection({ [addrA]: await recordAccount({ signer: SIGNER_A, digest: D1, image: "a/b", commit: "0123456789ab" }) });
@@ -100,7 +105,7 @@ test("quorum: needs N distinct signers, each with their own record account", asy
   assert.equal(r.rec.signers.length, 2);
 });
 
-test("quorum above the number of listed signers can never pass", async () => {
+test("quorum above the number of listed signers can never pass", { skip }, async () => {
   const r = await checkPda({ connection: stubConnection({}), programId: PROGRAM_ID, signers: [SIGNER_A], digest: D1, quorum: 2 });
   assert.equal(r.status, "missing");
 });
