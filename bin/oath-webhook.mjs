@@ -22,6 +22,9 @@ const quorumEnv = Number(process.env.OATH_QUORUM || 1);
 if (quorumEnv <= 1) {
   console.warn("oath: OATH_QUORUM is 1 — a single stolen CI key is enough to admit a forged image. Consider OATH_QUORUM=2 with an independent approver key kept outside CI (see README: Signer quorum).");
 }
+if (!process.env.OATH_ALLOWED_REGISTRIES) {
+  console.warn("oath: OATH_ALLOWED_REGISTRIES is not set — anyone who can create a Pod can make this webhook send a HEAD/GET to any host named in the image field (SSRF). Set it to the registries you actually use (see README: Availability, and THREAT-MODEL.md).");
+}
 
 const handler = makeHandler({
   signers,
