@@ -124,42 +124,14 @@
   <section class="section" id="how" aria-labelledby="flow-h">
     <div class="wrap">
       <h2 id="flow-h" data-i18n="flow_h">How it works</h2>
-      <ol class="flow">
-        <li class="step">
-          <svg class="glyph" viewBox="0 0 112 72" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <rect x="22" y="6" width="68" height="16" rx="3"/>
-            <rect x="14" y="28" width="84" height="16" rx="3"/>
-            <rect x="6" y="50" width="100" height="16" rx="3"/>
-          </svg>
-          <h3 data-i18n="st1_t">Build</h3>
-          <p class="muted" data-i18n="st1_p">CI builds the image.</p>
-          <svg class="arrow" viewBox="0 0 32 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M1 6h29M25 1l5 5-5 5"/></svg>
-        </li>
-        <li class="step">
-          <svg class="glyph" viewBox="0 0 112 72" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <rect x="4" y="20" width="28" height="32" rx="3" stroke-opacity=".5"/>
-            <rect x="42" y="20" width="28" height="32" rx="3" stroke-opacity=".5"/>
-            <rect x="80" y="20" width="28" height="32" rx="3" stroke-width="2.25"/>
-            <path d="M32 36h10M70 36h10" stroke-opacity=".5"/>
-            <path d="M88 33h12M88 39h8" stroke-linecap="round"/>
-          </svg>
-          <h3 data-i18n="st2_t">Record</h3>
-          <p class="muted" data-i18n="st2_p">Its digest goes to Solana, signed by the CI key.</p>
-          <svg class="arrow" viewBox="0 0 32 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M1 6h29M25 1l5 5-5 5"/></svg>
-        </li>
-        <li class="step">
-          <svg class="glyph" viewBox="0 0 112 72" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M4 36h30"/>
-            <rect x="34" y="12" width="12" height="48" rx="3"/>
-            <path d="M46 24h20" class="g-ok"/>
-            <path d="M74 24l6 6 12-13" class="g-ok" stroke-width="2.25"/>
-            <path d="M46 48h20" class="g-bad"/>
-            <path d="M76 42l14 14M90 42L76 56" class="g-bad" stroke-width="2.25"/>
-          </svg>
-          <h3 data-i18n="st3_t">Verify</h3>
-          <p class="muted" data-i18n="st3_p">Before deploy, oath verify or the webhook looks for a record.</p>
-        </li>
-      </ol>
+      <p class="muted flow-lede" data-i18n="flow_lede">Install the CLI once. oath init creates the signing key. oath verify then blocks any deploy of an image your pipeline didn't record.</p>
+      <div class="term flow-term" aria-hidden="true">
+        <div class="term-bar">
+          <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span data-i18n="term_title">terminal</span>
+        </div>
+        <div class="term-body flow-term-body"><pre id="flow-out"></pre></div>
+      </div>
 
       <details class="more">
         <summary data-i18n="details">Details</summary>

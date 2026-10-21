@@ -42,12 +42,7 @@
       p_bad: 'A swapped image',
       term_title: 'terminal',
       flow_h: 'How it works',
-      st1_t: 'Build',
-      st1_p: 'CI builds the image.',
-      st2_t: 'Record',
-      st2_p: 'Its digest goes to Solana, signed by the CI key.',
-      st3_t: 'Verify',
-      st3_p: 'Before deploy, oath verify or the webhook looks for a record.',
+      flow_lede: 'Install the CLI once. oath init creates the signing key. oath verify then blocks any deploy of an image your pipeline didn’t record.',
       details: 'Details',
       fmt_p: 'One Memo per build:',
       fmt_legend: 'version | image name | commit (12 chars) | image digest | time',
@@ -158,12 +153,7 @@
       p_bad: 'Підмінений образ',
       term_title: 'термінал',
       flow_h: 'Як це працює',
-      st1_t: 'Збірка',
-      st1_p: 'CI збирає образ.',
-      st2_t: 'Запис',
-      st2_p: 'Його digest іде в Solana, підписаний ключем CI.',
-      st3_t: 'Перевірка',
-      st3_p: 'Перед деплоєм oath verify або webhook шукає запис.',
+      flow_lede: 'Встановіть CLI один раз. oath init створює ключ підпису. oath verify потім блокує деплой будь-якого образу, який не записав ваш пайплайн.',
       details: 'Докладніше',
       fmt_p: 'Один Memo на збірку:',
       fmt_legend: 'версія | імʼя образу | коміт (12 символів) | digest образу | час',
@@ -793,6 +783,72 @@
     }
   }
 
+  /* ---------- "how it works" terminal loop (decorative; a real example is in the live verifier above) ---------- */
+  const FLOW_SCRIPT = [
+    { cmd: 'npm install -g oath-verify', out: [[null, 'added 1 package in 1s']] },
+    { cmd: 'oath init', out: [
+      [null, 'Created a CI key: .oath/ci-key.json'],
+      [null, 'OATH_SIGNER: 5D4W8x…hoih'],
+    ] },
+    { cmd: 'oath verify --image ghcr.io/me/app:latest', out: [
+      ['good', 'VERIFIED  sha256:d9e853e8…e4b6bc'],
+      [null, 'exit code: 0'],
+    ] },
+  ];
+  function initFlowDemo() {
+    const out = $('flow-out');
+    if (!out) return;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const outLine = (cls, text) => out.appendChild(ln(cls ? span(cls, text) : text));
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      for (const step of FLOW_SCRIPT) {
+        out.appendChild(ln([span('prompt', '$ '), step.cmd]));
+        for (const [cls, text] of step.out) outLine(cls, text);
+      }
+      return;
+    }
+
+    let visible = true;
+    const el = document.querySelector('.flow-term');
+    if (el && 'IntersectionObserver' in window) {
+      new IntersectionObserver((entries) => { visible = entries[0].isIntersecting; }, { threshold: 0.15 }).observe(el);
+    }
+    const waitVisible = async () => { while (!visible || document.hidden) await sleep(300); };
+
+    async function typeLine(cmd) {
+      const row = ln(span('prompt', '$ '));
+      const text = document.createTextNode('');
+      const cursor = span('cursor', '');
+      row.append(text, cursor);
+      out.appendChild(row);
+      for (const ch of cmd) {
+        await waitVisible();
+        text.textContent += ch;
+        await sleep(24 + Math.random() * 30);
+      }
+      cursor.classList.add('hidden');
+    }
+
+    (async function loop() {
+      for (;;) {
+        out.replaceChildren();
+        for (const step of FLOW_SCRIPT) {
+          await waitVisible();
+          await typeLine(step.cmd);
+          await sleep(260);
+          for (const [cls, text] of step.out) outLine(cls, text);
+          await sleep(850);
+        }
+        await sleep(2200);
+        const pre = out; // fade the whole block out, then clear and start over
+        pre.classList.add('clearing');
+        await sleep(350);
+        pre.classList.remove('clearing');
+      }
+    })();
+  }
+
   /* ---------- init ---------- */
   function init() {
     const qKey = params.get('key');
@@ -820,6 +876,7 @@
 
     initTabs();
     initCopy();
+    initFlowDemo();
     applyLang(detectLang());
 
     // key + digest in the URL: start the check automatically
