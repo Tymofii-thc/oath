@@ -52,4 +52,24 @@ out="$(node "$root/bin/oath.mjs" verify --program "$PROGRAM_ID" --signer "$CI_PU
 check "verify --program reports REVOKED after revocation" 1 $?
 case "$out" in *REVOKED*) check "output says REVOKED" ok ok;; *) check "output says REVOKED" ok "$out";; esac
 
+# Pre-funding the PDA address (anyone can send lamports to any address) must not block a record or a revocation:
+# a plain create_account would fail on it, and a blocked revocation is the attack this backend exists to prevent.
+addr() { node --input-type=module -e "import('$root/lib/pda.mjs').then(async (m) => console.log((await m.$1({ programId: '$PROGRAM_ID', signer: '$CI_PUB', digest: '$2' })).toBase58()))"; }
+D2="sha256:$(printf 'e%.0s' $(seq 1 64))"
+solana transfer "$(addr deriveRevokeAddress "$D2")" 0.002 --from "$key_dir/ci.json" --allow-unfunded-recipient --url $RPC >/dev/null 2>&1
+check "pre-funded revoke address (setup)" 0 $?
+node "$root/bin/oath.mjs" anchor --program "$PROGRAM_ID" --image ghcr.io/me/e2e --digest "$D2" --commit deadbeefcafe --rpc $RPC >/dev/null 2>&1
+check "anchor still works" 0 $?
+node "$root/bin/oath.mjs" revoke --program "$PROGRAM_ID" --digest "$D2" --reason "squat test" --rpc $RPC >/dev/null 2>&1
+check "revoke works although its address was pre-funded" 0 $?
+out="$(node "$root/bin/oath.mjs" verify --program "$PROGRAM_ID" --signer "$CI_PUB" --digest "$D2" --rpc $RPC 2>&1)"
+case "$out" in *REVOKED*) check "the pre-funded revocation counts" ok ok;; *) check "the pre-funded revocation counts" ok "$out";; esac
+
+D3="sha256:$(printf 'f%.0s' $(seq 1 64))"
+solana transfer "$(addr deriveRecordAddress "$D3")" 0.002 --from "$key_dir/ci.json" --allow-unfunded-recipient --url $RPC >/dev/null 2>&1
+node "$root/bin/oath.mjs" anchor --program "$PROGRAM_ID" --image ghcr.io/me/e2e --digest "$D3" --commit deadbeefcafe --rpc $RPC >/dev/null 2>&1
+check "anchor works although its address was pre-funded" 0 $?
+node "$root/bin/oath.mjs" verify --program "$PROGRAM_ID" --signer "$CI_PUB" --digest "$D3" --rpc $RPC >/dev/null 2>&1
+check "the pre-funded record verifies" 0 $?
+
 [ $fails -eq 0 ] && echo "ALL PASSED" || { echo "$fails FAILED"; exit 1; }

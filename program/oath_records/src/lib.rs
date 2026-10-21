@@ -22,7 +22,7 @@ use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint,
     entrypoint::ProgramResult,
-    program::invoke_signed,
+    program::{invoke, invoke_signed},
     program_error::ProgramError,
     pubkey::Pubkey,
     rent::Rent,
@@ -55,6 +55,40 @@ pub fn process_instruction(program_id: &Pubkey, accounts: &[AccountInfo], data: 
     }
 }
 
+/// Creates the PDA account, also when someone sent lamports to the address first.
+///
+/// Anyone can transfer lamports to any address without its signature, so a plain `create_account` (which fails
+/// on an address that already holds lamports) would let a third party block a record, or worse a revocation,
+/// forever by pre-funding the PDA (found in review, reproduced on devnet). The account is then topped up to the
+/// rent-exempt minimum, given its size and assigned to this program instead. The PDA signs for allocate/assign
+/// through its seeds, which only this program can do.
+fn create_pda_account<'a>(
+    payer: &AccountInfo<'a>,
+    pda: &AccountInfo<'a>,
+    system: &AccountInfo<'a>,
+    program_id: &Pubkey,
+    space: usize,
+    seeds: &[&[u8]],
+) -> ProgramResult {
+    let rent = Rent::get()?.minimum_balance(space);
+    let have = pda.lamports();
+    if have == 0 {
+        return invoke_signed(
+            &system_instruction::create_account(payer.key, pda.key, rent, space as u64, program_id),
+            &[payer.clone(), pda.clone(), system.clone()],
+            &[seeds],
+        );
+    }
+    if have < rent {
+        invoke(
+            &system_instruction::transfer(payer.key, pda.key, rent - have),
+            &[payer.clone(), pda.clone(), system.clone()],
+        )?;
+    }
+    invoke_signed(&system_instruction::allocate(pda.key, space as u64), &[pda.clone(), system.clone()], &[seeds])?;
+    invoke_signed(&system_instruction::assign(pda.key, program_id), &[pda.clone(), system.clone()], &[seeds])
+}
+
 fn process_record(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if data.len() != 32 + 32 + 12 + 8 {
         return Err(invalid("Record: bad instruction data length"));
@@ -83,17 +117,13 @@ fn process_record(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) ->
         // (A record is a historical fact; it does not change once it exists.)
         return Ok(());
     }
-    if **record.lamports.borrow() > 0 || record.owner != system.key {
+    // a system-owned, data-less account (empty, or pre-funded by anyone) is fine; anything else is not ours
+    if record.owner != system.key || !record.data_is_empty() {
         return Err(invalid("Record: PDA account exists but is not ours"));
     }
 
-    let rent = Rent::get()?.minimum_balance(RECORD_LEN);
     let seeds: &[&[u8]] = &[RECORD_SEED, signer.key.as_ref(), &digest, &[bump]];
-    invoke_signed(
-        &system_instruction::create_account(signer.key, record.key, rent, RECORD_LEN as u64, program_id),
-        &[signer.clone(), record.clone(), system.clone()],
-        &[seeds],
-    )?;
+    create_pda_account(signer, record, system, program_id, RECORD_LEN, seeds)?;
 
     let mut out = record.try_borrow_mut_data()?;
     out[0] = TAG_RECORD;
@@ -132,17 +162,12 @@ fn process_revoke(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) ->
         // A revocation is final: once it exists, this program never overwrites or removes it.
         return Ok(());
     }
-    if **revoke.lamports.borrow() > 0 || revoke.owner != system.key {
+    if revoke.owner != system.key || !revoke.data_is_empty() {
         return Err(invalid("Revoke: PDA account exists but is not ours"));
     }
 
-    let rent = Rent::get()?.minimum_balance(REVOKE_LEN);
     let seeds: &[&[u8]] = &[REVOKE_SEED, signer.key.as_ref(), &digest, &[bump]];
-    invoke_signed(
-        &system_instruction::create_account(signer.key, revoke.key, rent, REVOKE_LEN as u64, program_id),
-        &[signer.clone(), revoke.clone(), system.clone()],
-        &[seeds],
-    )?;
+    create_pda_account(signer, revoke, system, program_id, REVOKE_LEN, seeds)?;
 
     let mut out = revoke.try_borrow_mut_data()?;
     out[0] = TAG_REVOKE;

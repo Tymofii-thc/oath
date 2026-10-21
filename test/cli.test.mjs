@@ -144,3 +144,9 @@ test("anchor records the digest of the local copy (what this job pushed), not wh
     assert.equal(t.hits(), 0, "no registry request needed");
   } finally { t.close(); }
 });
+
+test("verify --max-age together with --program is an error, not silently ignored", async () => {
+  const r = await cli(["verify", "--signer", SIGNER, "--digest", D, "--max-age", "7", "--program", "Prog11111111111111111111111111111111111111", "--rpc", "http://127.0.0.1:9"]);
+  assert.equal(r.code, 2, r.out + r.err);
+  assert.match(r.err, /--max-age does not work with --program/);
+});

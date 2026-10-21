@@ -198,3 +198,8 @@ test("without programId, the Memo backend is used even if deps.findPda is given 
   const r = await h(pod(["ghcr.io/me/app:v1"]));
   assert.equal(r.response.allowed, true);
 });
+
+test("OATH_MAX_AGE_DAYS together with OATH_PROGRAM refuses to start instead of being silently ignored", () => {
+  assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "http://x", maxAgeSeconds: 86400, programId: "Prog11111111111111111111111111111111111111" }), /OATH_MAX_AGE_DAYS does not work with OATH_PROGRAM/);
+  assert.doesNotThrow(() => makeHandler({ signers: ["S"], rpcUrl: "http://x", programId: "Prog11111111111111111111111111111111111111" }));
+});

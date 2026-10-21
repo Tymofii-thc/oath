@@ -119,6 +119,7 @@ async function verify() {
   // history. Closes the revocation-eviction-by-spam gap in THREAT-MODEL.md, at the cost of needing
   // @solana/web3.js and a deployed program. Opt-in only: every existing invocation is unaffected.
   const programId = arg("program") || process.env.OATH_PROGRAM;
+  if (programId && maxAgeDays) fail(2, "--max-age does not work with --program yet (an on-chain record has no trustworthy age: the time in it is supplied by the signer). Drop one of them; a security flag that is silently ignored would be worse than an error.");
   let check;
   if (programId) {
     let pda;
