@@ -11,6 +11,8 @@ for *any* signer (including your approver, which defeats `--quorum 2`) or closes
 **Why a new deployment.** The devnet instance `6n6fJ6WQgSQFie6BQHfGxFgw9groqusUgwC48Y7hgpJq` has an upgrade authority (`66RLA5s2R3XHGG7KPzcEWqitDZ3bbBDcb2XPhDgNw7uj`)
 that the maintainer does not have, so it cannot be fixed or handed over. The fixed program has to go to a **new program ID**.
 
+**Done on 2026-10-21 (devnet):** the maintainer's machine ran these steps; the current program is `EWse8WXE3BYTeLvyDHufhp1Z73Pjqiq7nohAPE4cLSEc`, authority `CTjTMp3huaSu7fdFo1N7xM1fYhdjzKKX9LudZzh2Cm6w` (key file `~/oath-program-authority.json`, generated with `--silent`, so there is **no recovery phrase**: back the file up, and generate a new key with a written phrase before mainnet). The program's own keypair is `~/oath-records-program.json`.
+
 The commands are for devnet and written for the fish shell. Check each flag with `solana program --help`: the CLI changes between releases.
 
 ## One time: the CLI and two keys

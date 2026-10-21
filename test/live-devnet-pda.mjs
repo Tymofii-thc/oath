@@ -1,13 +1,13 @@
 // Regression test against the REAL devnet deployment of program/oath_records (not part of `npm test`,
 // which is offline), same reasoning as test/live-devnet.mjs for the Memo path.
-// Fixtures anchored/revoked live on devnet during development (see THREAT-MODEL.md, "Found in review"):
+// Fixtures anchored/revoked live on devnet under the program deployed on 2026-10-21 (the first deployment was replaced: see program/oath_records/DEPLOY.md):
 //   VERIFIED_DIGEST  anchored by the project's CI key, never revoked -> must still verify
 //   REVOKED_DIGEST   anchored, then revoked by the same key          -> must report revoked, permanently
 //   UNRECORDED_DIGEST never anchored under this program              -> must be missing
 import { checkPda } from "../lib/pda.mjs";
 
-const PROGRAM_ID = "6n6fJ6WQgSQFie6BQHfGxFgw9groqusUgwC48Y7hgpJq";
-const CI = "66RLA5s2R3XHGG7KPzcEWqitDZ3bbBDcb2XPhDgNw7uj";
+const PROGRAM_ID = "EWse8WXE3BYTeLvyDHufhp1Z73Pjqiq7nohAPE4cLSEc";
+const CI = "5D4W8x8UeqW3qVi9uzNzvJPWiJZQaRWVR9ru2ckFhoih"; // the project's CI key, which anchored/revoked the fixtures below
 const rpcUrl = process.env.SOLANA_RPC || "https://api.devnet.solana.com";
 const VERIFIED_DIGEST = "sha256:" + "d".repeat(64);
 const REVOKED_DIGEST = "sha256:" + "e".repeat(64);

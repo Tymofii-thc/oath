@@ -48,11 +48,10 @@ kubectl run down2 --image="$OK_IMAGE" --restart=Never >/dev/null 2>&1; check "we
 
 # OATH_PROGRAM (experimental, README: "On-chain records"): the real devnet-deployed program, in the real
 # shipped Docker image, inside a real cluster. The fixtures are the same ones test/live-devnet-pda.mjs
-# uses, anchored/revoked live on devnet during development — real on-chain state, not a mock. Anchored by
-# a different key than $OATH_SIGNER (this project's CI key for the Memo path): the webhook is reinstalled
-# with that signer for this section.
-PDA_PROG=6n6fJ6WQgSQFie6BQHfGxFgw9groqusUgwC48Y7hgpJq
-PDA_SIGNER=66RLA5s2R3XHGG7KPzcEWqitDZ3bbBDcb2XPhDgNw7uj
+# uses, anchored/revoked live on devnet — real on-chain state, not a mock. The webhook is reinstalled for this section
+# with the program id below.
+PDA_PROG=EWse8WXE3BYTeLvyDHufhp1Z73Pjqiq7nohAPE4cLSEc
+PDA_SIGNER=5D4W8x8UeqW3qVi9uzNzvJPWiJZQaRWVR9ru2ckFhoih
 PDA_IMG=ghcr.io/tymofii-thc/oath-records-devnet-check
 PDA_OK="sha256:$(printf 'd%.0s' $(seq 1 64))"       # anchored, never revoked
 PDA_REVOKED="sha256:$(printf 'e%.0s' $(seq 1 64))"  # anchored, then revoked
