@@ -103,6 +103,10 @@
       r9_w: 'The webhook checks updates and ephemeral containers too.',
       r10_s: 'Pods that were already running before install',
       r10_w: 'install.sh and Helm audit them at once and then every hour; a failed Job means an unverified or revoked image.',
+      r11_s: 'Another webhook rewrites the image after oath looked at it',
+      r11_w: 'The verdict comes from a validating webhook, which sees the final Pod. Tested against a real foreign mutator.',
+      r12_s: 'The webhook image itself is replaced',
+      r12_w: 'install.sh checks it (Solana record and Sigstore attestation) and installs it by digest.',
       nc_h: 'Not covered',
       nc1_h: 'Stolen CI signing key.',
       nc1_p: 'Whoever holds it can record a forged digest. --quorum 2 adds a second approver key but is off by default. Rotation, revocation and --max-age limit the damage.',
@@ -216,6 +220,10 @@
       r9_w: 'Webhook перевіряє також оновлення та ephemeral-контейнери.',
       r10_s: 'Pod, що працювали ще до встановлення',
       r10_w: 'install.sh і Helm перевіряють їх одразу, а потім щогодини; Job із помилкою означає непідтверджений чи відкликаний образ.',
+      r11_s: 'Інший webhook переписує образ після перевірки oath',
+      r11_w: 'Вердикт дає validating webhook: він бачить остаточний Pod. Перевірено на справжньому сторонньому mutator.',
+      r12_s: 'Підмінено образ самого webhook',
+      r12_w: 'install.sh перевіряє його (запис у Solana й атестація Sigstore) і ставить за digest.',
       nc_h: 'Не покрито',
       nc1_h: 'Вкрадений ключ підпису CI.',
       nc1_p: 'Хто його має, може записати фальшивий digest. --quorum 2 додає другий ключ затверджувача, але за замовчуванням вимкнений. Ротація, відкликання й --max-age зменшують шкоду.',
@@ -821,18 +829,24 @@
   }
 
   /* ---------- "how it works" terminal loop (decorative; a real example is in the live verifier above) ----------
-     Every "out" line is real, not invented: pulled verbatim (or truncated, same as shortKey/shortDigest elsewhere on
-     this page) from what bin/oath.mjs actually prints, or from a real anchored record. No install log: the package
+     Every "out" line is what bin/oath.mjs prints (digests shortened with …, names generic): the real wording of init, VERIFIED and NOT
+     VERIFIED, no invented lines (the CLI prints no "exit code", so none is shown). No install log: the package
      count changes with sigstore's own dependency tree, so a specific number here would eventually just be wrong. */
   const FLOW_SCRIPT = [
     { cmd: 'npm install -g oath-verify', out: [] },
     { cmd: 'oath init', out: [
       [null, 'Created a CI key: .oath/ci-key.json'],
-      [null, 'OATH_SIGNER (public, safe to share): 5D4W8x…hoih'],
+      [null, 'Public key (OATH_SIGNER, safe to share):'],
+      [null, '  5D4W8x8UeqW3qVi9uzNzvJPWiJZQaRWVR9ru2ckFhoih'],
     ] },
     { cmd: 'oath verify --image ghcr.io/me/app:latest', out: [
       ['good', 'VERIFIED  sha256:d9e853e8…e4b6bc'],
-      [null, 'exit code: 0'],
+      [null, '  built from commit 0123456789ab'],
+    ] },
+    { cmd: 'oath verify --image ghcr.io/me/app:swapped', out: [
+      ['badc', 'NOT VERIFIED  sha256:9f2c41ab…07d3e1'],
+      [null, '  No pipeline build with this digest for ghcr.io/me/app was anchored by 5D4W8x…hoih.'],
+      [null, '  Refusing to proceed: the image may have been replaced outside the pipeline.'],
     ] },
   ];
   function initFlowDemo() {
