@@ -28,6 +28,14 @@ kubectl create deploy evil --image="$BAD_IMAGE" >/dev/null 2>&1; sleep 8
 msg=$(kubectl get rs -l app=evil -o jsonpath='{.items[0].status.conditions[*].message}' 2>/dev/null)
 case "$msg" in *"refusing to admit"*) check "deployment pods blocked" ok ok;; *) check "deployment pods blocked" ok "none";; esac
 
+# the API server really calls the pin webhook (the pin counter of the webhook pods, summed over replicas)
+pins=0
+for pod in $(kubectl -n oath-system get pods -l app=oath-webhook -o name 2>/dev/null); do
+  n=$(kubectl -n oath-system exec "$pod" -- node -e "process.env.NODE_TLS_REJECT_UNAUTHORIZED='0';fetch('https://127.0.0.1:8443/metrics').then(r=>r.text()).then(t=>console.log((t.match(/oath_pin_requests_total (\\d+)/)||[])[1]||0))" 2>/dev/null || echo 0)
+  pins=$((pins + ${n:-0}))
+done
+[ "$pins" -ge 1 ]; check "the API server calls the pin webhook (/pin)" 0 $?
+
 # a bare Pod's image can be edited in place; ephemeral containers (kubectl debug) can be added: both must be checked too
 kubectl patch pod ok -p "{\"spec\":{\"containers\":[{\"name\":\"ok\",\"image\":\"$BAD_IMAGE\"}]}}" >/dev/null 2>&1; check "in-place image swap on a running pod denied" 1 $?
 kubectl debug ok --image="$BAD_IMAGE" --target=ok -- sleep 1 >/dev/null 2>&1; check "ephemeral container with un-anchored image denied" 1 $?
