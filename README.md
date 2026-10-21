@@ -24,6 +24,12 @@ deploy ──► docker pull ──► oath verify ──► ✔ exit 0  → dep
                                          ✘ exit 1  → deploy stopped
 ```
 
+**Why Solana, honestly.** Not for extra cryptographic security — a signed, append-only log (what Sigstore's Rekor already is) gives the same tamper-evidence, and oath does not cryptographically verify the chain either: the RPC answer is trusted, not light-client-checked (see THREAT-MODEL.md, "Trust assumptions"). What a public ledger buys instead is a trust root nobody operates: records live on thousands of independent validators, not a server we (or anyone) can quietly edit or take offline, and anyone can read or verify them with no account. Named comparisons, since vague "decentralization" isn't an answer:
+- **Sigstore/Rekor** is the closest cousin, and also a public transparency log — the difference is operational (no Sigstore-project infrastructure to depend on), not cryptographic. oath also *uses* Sigstore itself (`--attest`, for build provenance); it is not a replacement for it.
+- **cosign + policy-controller, Kyverno, Connaisseur** are mature, free, widely-adopted Kubernetes admission webhooks that already verify image signatures/attestations. oath's webhook does the same policy job; what differs is the backing store (a public ledger instead of a registry-attached signature), not the enforcement model.
+
+If you already run Rekor or one of those webhooks, this isn't a reason to switch. It's for teams who want a provenance gate without standing up that infrastructure.
+
 **Install:** `npm install -g oath-verify` gives you the `oath` command. Or skip the install and put `npx --yes oath-verify` in front of any command below (handy in CI: pin it as `npx --yes oath-verify@0.3.2`). In a clone, `node bin/oath.mjs` is the same thing. `oath` below means any of these.
 
 ## Set up in 3 steps
