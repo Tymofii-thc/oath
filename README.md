@@ -99,7 +99,8 @@ kubectl run t --image=nginx        # → denied: no pipeline build anchored by t
 - `OATH_MODE=audit` allows everything but returns warnings: useful for a first rollout.
 - `OATH_FAILURE_POLICY=Ignore deploy/install.sh` sets `failurePolicy: Ignore` (availability over enforcement; combine with `oath audit`). The webhook runs 2 replicas with a PodDisruptionBudget.
 - Private registries: `OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'` (tested against a password-protected registry and a mock token registry; note that the kubelet still needs its own `imagePullSecrets` to pull the image).
-- Tested in a real cluster (kind): `test/e2e-kind.sh` covers admit, tag pinning, deny, Deployment pods blocked, and fail-closed with the webhook down.
+- **Two webhooks, on purpose:** the verdict comes from a `ValidatingWebhookConfiguration`, which sees the Pod after every mutating webhook in the cluster (sidecar injectors and the like) has run, so nothing can change an image behind its back. Pinning a tag to its digest is a separate `MutatingWebhookConfiguration` that never denies and is reinvoked after other mutators; if it is down, the verdict still checks the tag. Upgrading from an older install: re-run `install.sh` / `helm upgrade`; the old single `/validate` endpoint still works until you do.
+- Tested in a real cluster (kind): `test/e2e-kind.sh` covers admit, tag pinning, deny, Deployment pods blocked, both webhook configurations, and fail-closed with the webhook down.
 
 ## Pods that are already running
 The webhook only checks new Pods. For the ones already running:

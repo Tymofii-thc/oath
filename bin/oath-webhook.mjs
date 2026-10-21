@@ -42,13 +42,14 @@ const handler = makeHandler({
   auths: process.env.OATH_REGISTRY_AUTH ? JSON.parse(process.env.OATH_REGISTRY_AUTH) : {},
 });
 
-const counts = { admitted: 0, denied: 0, warned: 0, bad_requests: 0 };
+const counts = { admitted: 0, denied: 0, warned: 0, bad_requests: 0, pin_requests: 0 };
 const metrics = () => {
   const lines = [];
   const add = (name, help, value, labels = "") => lines.push(`# HELP oath_${name} ${help}`, `# TYPE oath_${name} counter`, `oath_${name}${labels} ${value}`);
   add("admission_total", "Admission decisions", counts.admitted, '{result="admitted"}');
   lines.push(`oath_admission_total{result="denied"} ${counts.denied}`, `oath_admission_total{result="warned"} ${counts.warned}`);
   add("bad_requests_total", "Unparseable admission requests", counts.bad_requests);
+  add("pin_requests_total", "Tag-to-digest pinning requests (the mutating webhook; they never deny)", counts.pin_requests);
   for (const [k, v] of Object.entries(handler.stats)) add(`${k}_total`, `Webhook lookup statistic: ${k}`, v);
   return lines.join("\n") + "\n";
 };
@@ -57,13 +58,17 @@ const app = async (req, res) => {
   const path = new URL(req.url, "http://x").pathname; // the API server appends ?timeout=…
   if (req.method === "GET" && (path === "/healthz" || path === "/readyz")) { res.end("ok"); return; }
   if (req.method === "GET" && path === "/metrics") { res.setHeader("content-type", "text/plain; version=0.0.4"); res.end(metrics()); return; }
-  if (req.method !== "POST" || path !== "/validate") { res.statusCode = 404; res.end(); return; }
+  // /verdict = the ValidatingWebhook (decides, sees the final Pod), /pin = the MutatingWebhook (tag -> digest, never denies),
+  // /validate = both in one (the old single webhook: an install that is half upgraded keeps working)
+  const phase = { "/validate": "all", "/verdict": "verdict", "/pin": "pin" }[path];
+  if (req.method !== "POST" || !phase) { res.statusCode = 404; res.end(); return; }
   let body = "";
   for await (const c of req) { body += c; if (body.length > 4_000_000) { res.statusCode = 413; res.end(); return; } }
   try {
-    const out = await handler(JSON.parse(body));
+    const out = await handler(JSON.parse(body), phase);
     const r = out.response;
-    if (!r.allowed) counts.denied++; else if (r.warnings?.length) counts.warned++; else counts.admitted++;
+    if (phase === "pin") counts.pin_requests++;
+    else if (!r.allowed) counts.denied++; else if (r.warnings?.length) counts.warned++; else counts.admitted++;
     console.log(JSON.stringify({ uid: r.uid, allowed: r.allowed, msg: r.status?.message, warn: r.warnings }));
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify(out));

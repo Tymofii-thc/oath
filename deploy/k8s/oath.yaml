@@ -82,8 +82,11 @@ spec:
   selector: { app: oath-webhook }
   ports: [{ port: 443, targetPort: 8443 }]
 ---
+# Two webhooks on purpose. The verdict is given by a ValidatingWebhook, which sees the Pod AFTER every mutating webhook in the cluster has run
+# (sidecar injectors and the like), so nothing can change an image behind its back. The MutatingWebhook only pins tags to digests; it never
+# denies, is reinvoked after other mutators, and if it is down the verdict phase still checks the (unpinned) tag.
 apiVersion: admissionregistration.k8s.io/v1
-kind: MutatingWebhookConfiguration
+kind: ValidatingWebhookConfiguration
 metadata:
   name: oath
 webhooks:
@@ -92,7 +95,6 @@ webhooks:
     sideEffects: None
     timeoutSeconds: 15
     failurePolicy: __FAILURE_POLICY__     # Fail = webhook down means pods are NOT admitted (secure default); Ignore = availability over enforcement
-    reinvocationPolicy: Never
     namespaceSelector:
       matchExpressions:
         - { key: oath.io/exempt, operator: NotIn, values: ["true"] }
@@ -103,5 +105,29 @@ webhooks:
         operations: ["CREATE", "UPDATE"]
         resources: ["pods", "pods/ephemeralcontainers"]
     clientConfig:
-      service: { name: oath-webhook, namespace: oath-system, path: /validate }
+      service: { name: oath-webhook, namespace: oath-system, path: /verdict }
+      caBundle: __CA_BUNDLE__
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: oath
+webhooks:
+  - name: pin.oath.io
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    timeoutSeconds: 10
+    failurePolicy: Ignore
+    reinvocationPolicy: IfNeeded
+    namespaceSelector:
+      matchExpressions:
+        - { key: oath.io/exempt, operator: NotIn, values: ["true"] }
+        - { key: kubernetes.io/metadata.name, operator: NotIn, values: ["kube-system", "kube-public", "kube-node-lease"] }
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods", "pods/ephemeralcontainers"]
+    clientConfig:
+      service: { name: oath-webhook, namespace: oath-system, path: /pin }
       caBundle: __CA_BUNDLE__

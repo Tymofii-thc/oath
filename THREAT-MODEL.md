@@ -19,7 +19,7 @@ That a container image running in your cluster (or about to be deployed) is **on
 | Manual `docker push`, bypassing CI | Denied: no record for that digest (**tested**) |
 | `kubectl apply` of an unrecorded image | Denied by the webhook, including Pods of Deployments/Jobs (**tested**) |
 | Edit the image of a running bare Pod, or `kubectl debug` with a foreign image | Denied: the webhook checks `UPDATE` and `pods/ephemeralcontainers` (**tested**) |
-| Move the tag between check and pull | Not possible: the webhook rewrites the tag to the verified digest (**tested**) |
+| Move the tag between check and pull | The pin webhook rewrites the tag to the digest before the verdict webhook looks at it, so the Pod runs that digest (**tested**). If the pin webhook is down (`failurePolicy: Ignore` on purpose), the verdict still resolves and checks the tag, and a window of seconds remains between that check and the kubelet's pull |
 | Forge a record without the CI key: send a transaction that only *mentions* the CI address next to a Memo the attacker signed | Ignored: a record counts only if the signer actually signed the transaction (**tested live on devnet**; this was a real hole in earlier versions, see "Found in review") |
 | Steal the CI key and record a malicious digest | Passes with one key. With `--quorum 2` it also needs the approver's record (**tested** with real Phantom and Solflare). Revoke afterwards with `oath revoke` (**tested**) |
 | Honest build of malicious code (compromised dependency or developer) | Not stopped. Mitigations: `--attest` (proves *which workflow* built it), SBOM attestation, optional Trivy gate |
@@ -37,7 +37,7 @@ That a container image running in your cluster (or about to be deployed) is **on
 - A stolen CI key can also **revoke** any digest, including the one in production (revocation by any trusted signer is final): a denial-of-service on new Pods.
 - Rolling back to an old digest that was recorded and later turned out vulnerable. Limit it with `--max-age` (off by default) or revoke the digest.
 - The `commit` field in a record is a label: nothing checks that the image was built from that commit.
-- The webhook is a *mutating* webhook (it pins the tag to the digest) with `reinvocationPolicy: Never`. Another mutating webhook that runs after it can still change the Pod, and the verdict is not given by a separate *validating* webhook. Planned, not built.
+- Another admission controller that is not a webhook (for example a mutating `ValidatingAdmissionPolicy`-style rule or a CRD controller that creates Pods through a different path) is outside what oath sees; the verdict is given by a *ValidatingWebhookConfiguration*, so it sees the Pod after every mutating *webhook* has run (sidecar injectors included). Before version 0.4.0 the single webhook was a mutating one with `reinvocationPolicy: Never`, which another mutator could change the Pod behind.
 - Images mounted as volumes (`volumes[].image`, newer Kubernetes) are not checked. A verified image can still run with any command or privileges: oath does not restrict the Pod spec.
 - The webhook certificate lasts 825 days and is not rotated. When it expires, `failurePolicy: Fail` blocks new Pods in the whole cluster: re-run `install.sh` (it makes a new one and restarts the Pods) before that.
 - Removing the old key from the trusted list after a rotation makes every record that only it signed invalid: images that were recorded only by the old key cannot be re-scheduled until they are recorded again.

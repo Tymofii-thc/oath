@@ -203,3 +203,52 @@ test("OATH_MAX_AGE_DAYS together with OATH_PROGRAM refuses to start instead of b
   assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "http://x", maxAgeSeconds: 86400, programId: "Prog11111111111111111111111111111111111111" }), /OATH_MAX_AGE_DAYS does not work with OATH_PROGRAM/);
   assert.doesNotThrow(() => makeHandler({ signers: ["S"], rpcUrl: "http://x", programId: "Prog11111111111111111111111111111111111111" }));
 });
+
+// The verdict and the pinning are two webhooks: the ValidatingWebhook decides on the final Pod, the MutatingWebhook only pins.
+test("verdict phase: denies an un-anchored image and never patches", async () => {
+  const h = mk();
+  const bad = await h(pod(["ghcr.io/me/evil:latest"]), "verdict");
+  assert.equal(bad.response.allowed, false);
+  const ok = await h(pod(["ghcr.io/me/app:v1"]), "verdict");
+  assert.equal(ok.response.allowed, true);
+  assert.equal(ok.response.patch, undefined, "a validating webhook cannot and must not mutate");
+});
+
+test("verdict phase checks the image as another mutating webhook left it, not as it was submitted", async () => {
+  // the Pod the verdict phase sees already carries the digest that a sidecar injector or a pin put there
+  const swapped = pod([`ghcr.io/me/evil@${D2}`]);
+  assert.equal((await mk()(swapped, "verdict")).response.allowed, false);
+  assert.equal((await mk()(pod([`ghcr.io/me/app@${D1}`]), "verdict")).response.allowed, true);
+});
+
+test("pin phase: pins a tag, never denies, and leaves digests and unresolvable tags alone", async () => {
+  const h = mk();
+  const tagged = await h(pod(["ghcr.io/me/app:v1"]), "pin");
+  assert.equal(tagged.response.allowed, true);
+  assert.deepEqual(patchOf(tagged), [{ op: "replace", path: "/spec/containers/0/image", value: `ghcr.io/me/app@${D1}` }]);
+  const evil = await h(pod(["ghcr.io/me/evil:latest"]), "pin");
+  assert.equal(evil.response.allowed, true, "pinning is not a gate: the verdict phase refuses this one");
+  assert.equal(patchOf(evil)[0].value, `ghcr.io/me/evil@${D2}`);
+  const pinned = await h(pod([`ghcr.io/me/app@${D1}`]), "pin");
+  assert.equal(pinned.response.allowed, true);
+  assert.equal(pinned.response.patch, undefined);
+  const unknown = await h(pod(["ghcr.io/me/nope:1"]), "pin");
+  assert.equal(unknown.response.allowed, true);
+  assert.equal(unknown.response.patch, undefined);
+});
+
+test("pin phase with pinning switched off patches nothing", async () => {
+  const r = await mk({ pin: false })(pod(["ghcr.io/me/app:v1"]), "pin");
+  assert.equal(r.response.allowed, true);
+  assert.equal(r.response.patch, undefined);
+});
+
+test("pin phase never holds a Pod back: a slow registry means allow without a patch", async () => {
+  const slow = makeHandler({ signers: ["S"], rpcUrl: "x", deadlineMs: 50, deps: { ...deps, resolveDigest: () => new Promise(() => {}) } });
+  const t0 = Date.now();
+  const r = await slow(pod(["ghcr.io/me/app:v1"]), "pin");
+  assert.equal(r.response.allowed, true);
+  assert.ok(Date.now() - t0 < 1000);
+  const v = await slow(pod(["ghcr.io/me/app:v1"]), "verdict");
+  assert.equal(v.response.allowed, false, "the verdict phase still fails closed on a timeout");
+});

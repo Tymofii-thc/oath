@@ -12,6 +12,11 @@ kind create cluster --name $cluster --wait 120s >/dev/null 2>&1
 kind load docker-image oath:e2e --name $cluster >/dev/null 2>&1
 OATH_SIGNER=$OATH_SIGNER OATH_IMAGE=oath:e2e "$root/deploy/install.sh" >/dev/null 2>&1
 
+kubectl get validatingwebhookconfiguration oath >/dev/null 2>&1; check "the verdict is a ValidatingWebhookConfiguration" 0 $?
+kubectl get mutatingwebhookconfiguration oath >/dev/null 2>&1; check "pinning is a separate MutatingWebhookConfiguration" 0 $?
+[ "$(kubectl get mutatingwebhookconfiguration oath -o jsonpath='{.webhooks[0].reinvocationPolicy}' 2>/dev/null)" = "IfNeeded" ]; check "the pin webhook is reinvoked after other mutators" 0 $?
+[ "$(kubectl get mutatingwebhookconfiguration oath -o jsonpath='{.webhooks[0].failurePolicy}' 2>/dev/null)" = "Ignore" ]; check "an unavailable pin webhook does not block Pods (the verdict still does)" 0 $?
+
 kubectl run ok --image="$OK_IMAGE" --restart=Never -- sleep 30 >/dev/null 2>&1; check "anchored image admitted" 0 $?
 img=$(kubectl get pod ok -o jsonpath='{.spec.containers[0].image}' 2>/dev/null)
 case "$OK_IMAGE" in
