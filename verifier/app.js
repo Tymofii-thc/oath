@@ -809,12 +809,9 @@
       return;
     }
 
-    let visible = true;
-    const el = document.querySelector('.flow-term');
-    if (el && 'IntersectionObserver' in window) {
-      new IntersectionObserver((entries) => { visible = entries[0].isIntersecting; }, { threshold: 0.15 }).observe(el);
-    }
-    const waitVisible = async () => { while (!visible || document.hidden) await sleep(300); };
+    // Only the tab itself being backgrounded pauses this (not scroll position: pausing while merely off-screen left it
+    // looking frozen rather than paused, since a quick scroll-past stops it mid-character with no visual cue it would resume).
+    const waitVisible = async () => { while (document.hidden) await sleep(300); };
 
     async function typeLine(cmd) {
       const row = ln(span('prompt', '$ '));
