@@ -257,3 +257,28 @@ test("a malformed attestation requirement stops the handler from being built", (
   assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "x", attestRepo: "me/app@main", deps }), /full ref/);
   assert.doesNotThrow(() => makeHandler({ signers: ["S"], rpcUrl: "x", attestRepo: "me/app/deploy.yml@refs/heads/main", deps }));
 });
+
+// Kubernetes ImageVolume: an OCI image mounted as a volume is an image to check as well
+const podWithVolume = (reference, extra = {}) => ({
+  request: { uid: "u1", kind: { kind: "Pod" }, object: { spec: { containers: [{ name: "c", image: "ghcr.io/me/app:v1" }], volumes: [{ name: "data", image: { reference } }] } }, ...extra },
+});
+
+test("an image volume with an un-anchored image is denied", async () => {
+  const r = await mk()(podWithVolume("ghcr.io/me/evil:latest"), "verdict");
+  assert.equal(r.response.allowed, false);
+  assert.match(r.response.status.message, /ghcr\.io\/me\/evil/);
+});
+
+test("an anchored image volume is allowed and its tag is pinned like a container's", async () => {
+  const r = await mk()(podWithVolume("ghcr.io/me/app:v1"));
+  assert.equal(r.response.allowed, true);
+  assert.ok(patchOf(r).some((p) => p.path === "/spec/volumes/0/image/reference" && p.value === `ghcr.io/me/app@${D1}`));
+});
+
+test("a volume swapped in place on UPDATE is checked, an unchanged one is not", async () => {
+  const old = { spec: { containers: [{ name: "c", image: "ghcr.io/me/app:v1" }], volumes: [{ name: "data", image: { reference: "ghcr.io/me/app:v1" } }] } };
+  const swapped = podWithVolume("ghcr.io/me/evil:latest", { operation: "UPDATE", oldObject: old });
+  assert.equal((await mk()(swapped, "verdict")).response.allowed, false);
+  const same = podWithVolume("ghcr.io/me/app:v1", { operation: "UPDATE", oldObject: old });
+  assert.equal((await mk()(same, "verdict")).response.allowed, true);
+});
