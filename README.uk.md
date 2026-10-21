@@ -70,7 +70,7 @@ node bin/oath.mjs anchor --image ghcr.io/me/app:latest           # запис з
 `verify --image repo@sha256:…` не потребує ні docker, ні звернення до реєстру. Якщо образу немає локально, digest тега береться з реєстру (приватні: `OATH_REGISTRY_AUTH`). Приклади для CI: [`examples/github-minimal.yml`](examples/github-minimal.yml) і [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) (Azure перевірено на справжньому pipeline з ACR).
 Коди виходу: `0` перевірено, `1` не перевірено, `2` помилка (мережа, аргументи). Для мейннету додай `--rpc <url>` або змінну `SOLANA_RPC` (і те саме для кроку 2 через вхід `rpc`).
 
-`verifier/index.html` це спрощена перевірка у браузері, для демо й для людей, які не лізуть у термінал: вона підтверджує, що підписант справді записав digest, але не дивиться на відкликання, кворум, імʼя образу, `--max-age` і атестації. Для рішень користуйся CLI. Живий: https://tymofii-thc.github.io/oath/
+`verifier/index.html` це спрощена перевірка у браузері, для демо й для людей, які не лізуть у термінал: вона підтверджує, що підписант справді записав digest і показує `REVOKED`, якщо довірений підписант його відкликав, але не перевіряє кворум, імʼя образу, `--max-age` і атестації. Для рішень користуйся CLI. Живий: https://tymofii-thc.github.io/oath/
 
 ## Azure DevOps (та інші CI)
 `oath anchor` і `oath verify` це звичайні команди, тож працює будь-який CI. [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) це повний pipeline для Azure Container Registry. **Перевірено на справжньому pipeline в Azure DevOps з ACR (2026-10-20): і запис, і перевірка пройшли.** Не перевірено: деплой в Azure Container Apps, змінні з Key Vault.

@@ -72,7 +72,7 @@ Exit codes: `0` verified, `1` not verified, `2` error (network, arguments). Opti
 
 `verify --image repo@sha256:…` needs neither docker nor a registry call; for a tag that is not in local docker the digest is read from the registry (private ones: `OATH_REGISTRY_AUTH`). CI examples: [`examples/github-minimal.yml`](examples/github-minimal.yml) and [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) (the Azure one was tested on a real Azure DevOps pipeline with ACR).
 
-`verifier/` is a simplified check in the browser, for demos and for people who avoid the terminal: it confirms that the signer really recorded the digest, but it does not look at revocations, quorum, the image name, `--max-age` or attestations. Use the CLI for decisions.
+`verifier/` is a simplified check in the browser, for demos and for people who avoid the terminal: it confirms that the signer really recorded the digest and shows `REVOKED` when a trusted signer revoked it, but it does not check quorum, the image name, `--max-age` or attestations. Use the CLI for decisions.
 
 ## Azure DevOps (and other CI systems)
 `oath anchor` and `oath verify` are plain commands, so any CI works. [`examples/azure-pipelines.yml`](examples/azure-pipelines.yml) is a complete pipeline for Azure Container Registry. **Tested on a real Azure DevOps pipeline with ACR (2026-10-20): record and verify both passed.** Not tested: Azure Container Apps deploys, Key Vault-backed variables.

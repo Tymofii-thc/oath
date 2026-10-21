@@ -32,7 +32,7 @@
       cta_run: 'Try the verifier',
       cta_docs: 'Set up in 3 steps',
       live_h: 'Verify an image',
-      live_p: 'Runs in your browser. A simplified version of the CLI check: no revocation, quorum or image-name check.',
+      live_p: 'Runs in your browser. A simplified version of the CLI check: it does check revocations, but not quorum, the image name or attestations.',
       f_signer: 'Signer public key',
       f_signer_ph: 'one or more, comma-separated',
       f_net: 'Network',
@@ -48,6 +48,8 @@
       fmt_legend: 'version | image name | commit (12 chars) | image digest | time',
       out_ok: 'verified, the deploy proceeds',
       out_bad: 'no record, the deploy stops',
+      rev_by: 'Revoked by {s} at {t}',
+      rev_stop: 'A trusted signer marked this digest as bad. Refusing to proceed, even though a record exists.',
       int_h: 'Set up',
       int_p: 'Run oath init once to create the CI key. Then:',
       int_tabs: 'Integration',
@@ -143,7 +145,7 @@
       cta_run: 'Спробувати верифікатор',
       cta_docs: 'Налаштувати за 3 кроки',
       live_h: 'Перевірити образ',
-      live_p: 'Працює в браузері. Спрощена версія перевірки CLI: без відкликання, кворуму й перевірки імені образу.',
+      live_p: 'Працює в браузері. Спрощена версія перевірки CLI: відкликання перевіряє, а кворум, імʼя образу й атестації ні.',
       f_signer: 'Публічний ключ підписанта',
       f_signer_ph: 'один або кілька, через кому',
       f_net: 'Мережа',
@@ -159,6 +161,8 @@
       fmt_legend: 'версія | імʼя образу | коміт (12 символів) | digest образу | час',
       out_ok: 'перевірено, деплой іде',
       out_bad: 'запису нема, деплой зупинено',
+      rev_by: 'Відкликав {s} о {t}',
+      rev_stop: 'Довірений підписант позначив цей digest як поганий. Деплой зупинено, хоча запис існує.',
       int_h: 'Налаштування',
       int_p: 'Один раз запустіть oath init, щоб створити ключ CI. Далі:',
       int_tabs: 'Інтеграція',
@@ -324,6 +328,22 @@
     return out;
   }
 
+  /* revocation memo: "[len] pod1r|digest|reason|ISO-time" (a trusted signer marked the digest as bad; final, like the CLI) */
+  function parseRevocations(memo) {
+    if (typeof memo !== 'string') return [];
+    const out = [];
+    for (const part of memo.split('; ')) {
+      const body = part.replace(/^\[\d+\]\s*/, '');
+      if (!body.startsWith('pod1r|')) continue;
+      const f = body.split('|');
+      if (f.length < 4) continue;
+      const digest = f[1].trim().toLowerCase();
+      if (!DIGEST_RE.test(digest)) continue;
+      out.push({ digest, reason: f[2], time: f.slice(3).join('|') });
+    }
+    return out;
+  }
+
   /* getSignaturesForAddress also lists transactions that merely mention the address (anyone can add it as a read-only
      account next to a memo they signed themselves), so a record counts only if the signer really signed the transaction. */
   // a confirmed transaction never changes: ask once (the public devnet RPC allows ~10 getTransaction per 10 s per IP).
@@ -371,10 +391,12 @@
     const sigs = await rpcCall(net, 'getSignaturesForAddress', [key, { limit: SIG_LIMIT }]);
     if (!Array.isArray(sigs)) throw new Error('unexpected RPC response');
     const records = [];
+    const revs = [];
     let okTx = 0;
     for (const s of sigs) {
       if (!s || s.err) continue; // skip failed transactions
       okTx++;
+      for (const rv of parseRevocations(s.memo)) if (rv.digest === digest) revs.push({ ...rv, sig: String(s.signature || '') });
       for (const r of parseMemo(s.memo)) {
         records.push({ ...r, signer: key, sig: String(s.signature || ''), blockTime: Number(s.blockTime) || 0 });
       }
@@ -383,8 +405,12 @@
     const mine = records.filter((r) => r.digest === digest).slice(0, 5);
     const flags = await Promise.all(mine.map((r) => signedByRetry(net, key, r.sig)));
     const verified = mine.filter((_, i) => flags[i]);
+    // a revocation counts only if the signer really signed it (anyone can mention the address), and it is final
+    const revCands = revs.slice(0, 3);
+    const revFlags = await Promise.all(revCands.map((rv) => signedByRetry(net, key, rv.sig)));
+    const revoked = revCands.find((_, i) => revFlags[i]) || null;
     const rest = records.filter((r) => r.digest !== digest).slice(0, SIGNED_CHECK_MAX); // for the table, checked afterwards
-    return { key, total: sigs.length, okTx, records: verified, rest };
+    return { key, total: sigs.length, okTx, records: verified, rest, revoked: revoked ? { ...revoked, signer: key } : null };
   }
 
   async function collect(net, keys, digest) {
@@ -502,6 +528,14 @@
       frag.appendChild(ln(t('fail_stop')));
       frag.appendChild(ln(span('badc', 'exit code: 1')));
       chip = 'exit 1';
+    } else if (r.kind === 'revoked') {
+      frag.appendChild(cmdline(r.v));
+      frag.appendChild(ln(span('badc verdict', 'REVOKED')));
+      frag.appendChild(ln(t('rev_by', { s: r.rev.signer, t: r.rev.time }) + (r.rev.reason ? ': ' + r.rev.reason : '')));
+      frag.appendChild(ln(t('rev_stop')));
+      frag.appendChild(ln(span('badc', 'exit code: 1')));
+      stateName = 'fail';
+      chip = 'exit 1';
     } else if (r.kind === 'error') {
       frag.appendChild(cmdline(r.v));
       frag.appendChild(ln([span('warnc', 'ERROR'), ' ' + t('err_rpc', { net: r.v.net, msg: r.msg })]));
@@ -512,7 +546,7 @@
 
     const pre = document.createElement('pre');
     pre.id = 'out';
-    if (fresh && (r.kind === 'ok' || r.kind === 'fail' || r.kind === 'error' || r.kind === 'invalid')) pre.className = 'fresh';
+    if (fresh && (r.kind === 'ok' || r.kind === 'fail' || r.kind === 'revoked' || r.kind === 'error' || r.kind === 'invalid')) pre.className = 'fresh';
     pre.appendChild(frag);
     el.body.replaceChildren(pre);
     el.out = pre;
@@ -650,7 +684,10 @@
     renderRecords();
 
     const match = rows.find((r) => r.digest === v.digest);
-    if (match) {
+    const rev = res.ok.map((r) => r.revoked).find(Boolean);
+    if (rev) {
+      state.result = { kind: 'revoked', v, rev };   // final: it wins over any record
+    } else if (match) {
       state.result = { kind: 'ok', v, match };
     } else if (res.firstError) {
       state.result = { kind: 'error', v, msg: res.firstError.message || 'unknown error' };
