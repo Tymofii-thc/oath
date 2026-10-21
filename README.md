@@ -30,7 +30,7 @@ deploy ──► docker pull ──► oath verify ──► ✔ exit 0  → dep
 
 If you already run Rekor or one of those webhooks, this isn't a reason to switch. It's for teams who want a provenance gate without standing up that infrastructure.
 
-**Install:** `npm install -g oath-verify` gives you the `oath` command. Or skip the install and put `npx --yes oath-verify` in front of any command below (handy in CI: pin it as `npx --yes oath-verify@0.3.2`). In a clone, `node bin/oath.mjs` is the same thing. `oath` below means any of these.
+**Install:** `npm install -g oath-verify` gives you the `oath` command. Or skip the install and put `npx --yes oath-verify` in front of any command below (handy in CI: pin it as `npx --yes oath-verify@0.4.0`). In a clone, `node bin/oath.mjs` is the same thing. `oath` below means any of these.
 
 ## Set up in 3 steps
 
