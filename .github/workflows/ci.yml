@@ -57,6 +57,18 @@ jobs:
           SOLANA_RPC: ${{ vars.SOLANA_RPC }}
         run: node test/live-devnet-pda.mjs
 
+      - name: The published webhook image is what install.sh would accept (recorded on Solana, attested by release-webhook on main)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNER: ${{ vars.OATH_SIGNER }}
+        run: |
+          # right after a push :latest can be the new image before release-webhook has attested and recorded it: retry for a few minutes
+          for i in 1 2 3 4 5 6 7 8; do
+            node bin/oath.mjs verify --signer "$SIGNER" --image ghcr.io/tymofii-thc/oath-webhook:latest --network devnet --rpc "${{ vars.SOLANA_RPC || 'https://api.devnet.solana.com' }}" --attest Tymofii-thc/oath/.github/workflows/release-webhook.yml@refs/heads/main && exit 0
+            sleep 45
+          done
+          exit 1
+
   e2e-pda:
     # The experimental --program backend end to end, against a real local Solana validator running the
     # actual compiled program (not devnet: no key or fees needed, and it exercises a fresh deploy each run).
