@@ -42,7 +42,7 @@ npx --yes oath-verify init      # or: node bin/oath.mjs init  in a clone
 
 **2. Record after the build** (in your workflow):
 ```yaml
-- uses: Tymofii-thc/oath@main
+- uses: Tymofii-thc/oath@v0.4.0
   with:
     image: ghcr.io/${{ github.repository }}
     digest: ${{ steps.build.outputs.digest }}
@@ -51,7 +51,7 @@ npx --yes oath-verify init      # or: node bin/oath.mjs init  in a clone
 
 **3. Verify before deploy** (no npx, no flags):
 ```yaml
-- uses: Tymofii-thc/oath/verify@main
+- uses: Tymofii-thc/oath/verify@v0.4.0
   with:
     signer: ${{ vars.OATH_SIGNER }}
     image: ghcr.io/${{ github.repository }}:latest

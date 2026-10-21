@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The browser verifier shows `REVOKED` (a revocation signed by the entered signer wins over a record).
+- Image volumes (`volumes[].image.reference`) are verified and pinned like container images (tested in a kind cluster with ImageVolume on).
+- `oath init` prints `Tymofii-thc/oath@v<version>` for the actions instead of `@main`; the docs pin `@v0.4.0`.
+- `jayson` is overridden to 5.x in this repository: 0 `npm audit` advisories for a checkout, CI and the webhook image (see THREAT-MODEL.md).
+
 ## 0.4.0
 
 **Upgrading.** Re-run `deploy/install.sh` (or `helm upgrade` with the new chart): the webhook is now two webhooks, and `install.sh` now needs Node (`npx`) or a checkout with `npm ci`, because it checks the webhook image before installing it. Everything else keeps working as before.
@@ -17,7 +24,7 @@
 - Deployed on devnet: `EWse8WXE3BYTeLvyDHufhp1Z73Pjqiq7nohAPE4cLSEc`, built by CI and checksum-checked. A review found that anyone could block a record or a revocation forever by sending lamports to its address first; the program now tops such an account up, allocates and assigns it (`test/e2e-pda.sh` covers it, and it was reproduced on the first deployment and shown fixed on this one, live). The first deployment `6n6fJ6WQ…` is deprecated: it has that flaw, and its upgrade authority is a key the maintainer does not have.
 - **Honestly experimental:** devnet only, no external audit, a single upgrade-authority key (a file on the maintainer's machine, no recovery phrase), not frozen. Whoever holds the authority can make the program create records for any signer, so **do not combine `--program` with `--quorum`**, and on mainnet audit first, then freeze or use a multisig. `--max-age` is refused with `--program`. CI publishes the built program with its checksum; `program/oath_records/DEPLOY.md` says how it was deployed.
 
-**Known issue.** `npm audit` reports 4 moderate advisories in `@solana/web3.js` 1.x's dependencies (`jayson`/`stream-json`, `uuid`); no fix inside 1.x, see THREAT-MODEL.md for the exposure as I understand it.
+**Known issue.** `npm audit` reports 4 moderate advisories in `@solana/web3.js` 1.x's dependencies (`jayson` 4 → `stream-json`, `uuid`). Fixed in this repository (and so in CI and the webhook image) by overriding `jayson` to 5.x; a plain `npm install oath-verify` still gets web3.js's own jayson 4, because npm does not apply a dependency's overrides. See THREAT-MODEL.md.
 
 **Docs.** README: "why Solana, honestly" moved to the top, with a named comparison against Rekor, cosign/policy-controller and Kyverno. `THREAT-MODEL.md` lists what is still open (the commit field is only a label, rollback to an old recorded digest, a stolen CI key can revoke, image volumes, the webhook certificate lasts 825 days, and more).
 

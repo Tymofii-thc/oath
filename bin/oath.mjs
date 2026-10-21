@@ -28,6 +28,8 @@ import { resolveDigest } from "../lib/registry.mjs";
 import { collectImages, listPodsInCluster } from "../lib/audit.mjs";
 import { verifyAttestation, parseAttestSpec } from "../lib/attest.mjs";
 
+const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version; // the release the init output pins to, not a moving branch
+
 function arg(name) {
   const i = process.argv.indexOf(`--${name}`);
   return i > -1 ? process.argv[i + 1] : undefined;
@@ -432,14 +434,14 @@ async function init() {
       `     gh secret set SOLANA_SECRET_KEY < ${out} && gh variable set OATH_SIGNER --body ${pub}`]),
     "",
     "2  After the image build, record the digest",
-    "     - uses: Tymofii-thc/oath@main",
+    `     - uses: Tymofii-thc/oath@v${VERSION}`,
     "       with:",
     "         image: ghcr.io/${{ github.repository }}",
     "         digest: ${{ steps.build.outputs.digest }}",
     "         secret-key: ${{ secrets.SOLANA_SECRET_KEY }}",
     "",
     "3  Before deploy, verify",
-    "     - uses: Tymofii-thc/oath/verify@main",
+    `     - uses: Tymofii-thc/oath/verify@v${VERSION}`,
     "       with:",
     "         signer: ${{ vars.OATH_SIGNER }}",
     "         image: ghcr.io/${{ github.repository }}:latest",

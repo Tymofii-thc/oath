@@ -161,14 +161,14 @@
           <p class="muted" data-i18n="gh_p">Add SOLANA_SECRET_KEY as a secret and OATH_SIGNER (the public key) as a variable.</p>
           <div class="code-wrap"><button type="button" class="copy" data-copy="code-gh" data-i18n="copy">Copy</button>
 <pre class="code-block" id="code-gh"><code># after the build: record the digest
-- uses: Tymofii-thc/oath@main
+- uses: Tymofii-thc/oath@v0.4.0
   with:
     image: ghcr.io/${{ github.repository }}
     digest: ${{ steps.build.outputs.digest }}
     secret-key: ${{ secrets.SOLANA_SECRET_KEY }}
 
 # before the deploy: fail the job if there is no record
-- uses: Tymofii-thc/oath/verify@main
+- uses: Tymofii-thc/oath/verify@v0.4.0
   with:
     signer: ${{ vars.OATH_SIGNER }}
     image: ghcr.io/${{ github.repository }}:latest</code></pre></div>

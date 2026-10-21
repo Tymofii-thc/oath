@@ -42,7 +42,7 @@ npx --yes oath-verify init      # або: node bin/oath.mjs init  у клоні
 
 **2. Запис після збірки** (у вашому workflow):
 ```yaml
-- uses: Tymofii-thc/oath@main
+- uses: Tymofii-thc/oath@v0.4.0
   with:
     image: ghcr.io/${{ github.repository }}
     digest: ${{ steps.build.outputs.digest }}
@@ -51,7 +51,7 @@ npx --yes oath-verify init      # або: node bin/oath.mjs init  у клоні
 
 **3. Перевірка перед деплоєм** (без npx і прапорців):
 ```yaml
-- uses: Tymofii-thc/oath/verify@main
+- uses: Tymofii-thc/oath/verify@v0.4.0
   with:
     signer: ${{ vars.OATH_SIGNER }}
     image: ghcr.io/${{ github.repository }}:latest

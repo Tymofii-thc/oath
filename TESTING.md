@@ -35,7 +35,7 @@ jobs:
       - id: build
         uses: docker/build-push-action@v6
         with: { context: ., push: true, tags: "ghcr.io/${{ github.repository }}:latest" }   # GHCR needs a lowercase repo name
-      - uses: Tymofii-thc/oath@main                      # records the digest on Solana
+      - uses: Tymofii-thc/oath@v0.4.0                      # records the digest on Solana
         with:
           image: ghcr.io/${{ github.repository }}
           digest: ${{ steps.build.outputs.digest }}
@@ -46,7 +46,7 @@ jobs:
     steps:
       - uses: docker/login-action@v3
         with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
-      - uses: Tymofii-thc/oath/verify@main               # fails the job if there is no record
+      - uses: Tymofii-thc/oath/verify@v0.4.0               # fails the job if there is no record
         with:
           signer: ${{ vars.OATH_SIGNER }}
           image: ghcr.io/${{ github.repository }}:latest
