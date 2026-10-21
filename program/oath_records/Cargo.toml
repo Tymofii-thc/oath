@@ -1,0 +1,18 @@
+[package]
+name = "oath_records"
+version = "0.1.0"
+edition = "2021"
+description = "oath: one account per (signer, digest), so verification is a direct lookup instead of a transaction-history scan. A revocation account can never be evicted by spamming the signer's address, unlike the Memo-based v1 records this complements."
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+solana-program = "2.2"
+solana-system-interface = { version = "1.0", features = ["bincode"] }
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1

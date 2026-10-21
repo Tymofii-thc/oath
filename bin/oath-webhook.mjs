@@ -6,6 +6,7 @@
 //      OATH_QUORUM=<N> (distinct signers required)   OATH_ATTEST_REPO=<owner/repo> (also require a Sigstore build attestation)
 //      OATH_STALE_OK_HOURS=<h> (default 1; while the RPC is down, admit digests verified within the last h hours; 0 = strict)
 //      OATH_LIMIT=<txs scanned per signer, default 1000>   OATH_DEADLINE_MS=<answer within, default 12000; 0 = off>
+//      OATH_PROGRAM=<id> (experimental: account-based backend instead of Memo scanning; see README, "On-chain records")
 //      OATH_MODE=enforce|audit (default enforce)  OATH_PIN=true|false (default true)
 //      OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}' (private registries)
 //      TLS_CERT, TLS_KEY (default /tls/tls.crt, /tls/tls.key)   PORT (default 8443)   OATH_PLAIN_HTTP=1 (tests only)
@@ -33,6 +34,7 @@ const handler = makeHandler({
   quorum: Number(process.env.OATH_QUORUM || 1),
   limit: Number(process.env.OATH_LIMIT || 1000),
   deadlineMs: Number(process.env.OATH_DEADLINE_MS ?? 12000), // answer before the API server's 15s webhook timeout
+  programId: process.env.OATH_PROGRAM || undefined,
   attestRepo: process.env.OATH_ATTEST_REPO || undefined,
   staleMs: Number(process.env.OATH_STALE_OK_HOURS ?? 1) * 3600000,
   mode: process.env.OATH_MODE || "enforce",

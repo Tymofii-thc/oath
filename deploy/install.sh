@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Installs the oath admission webhook into the current kubectl context.
-# Usage: OATH_SIGNER=<pubkey[,pubkey]> [OATH_NETWORK=devnet|mainnet] [SOLANA_RPC=url[,url]] [OATH_IMAGE=…] [OATH_FAILURE_POLICY=Fail|Ignore] [OATH_QUORUM=2] [OATH_ATTEST_REPO=owner/repo] [OATH_MODE=enforce|audit] [OATH_AUDIT_SCHEDULE="*/30 * * * *"] [OATH_STALE_OK_HOURS=1] [OATH_LIMIT=1000] [OATH_ALLOWED_REGISTRIES=ghcr.io,host2] [OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'] deploy/install.sh
+# Usage: OATH_SIGNER=<pubkey[,pubkey]> [OATH_NETWORK=devnet|mainnet] [SOLANA_RPC=url[,url]] [OATH_IMAGE=…] [OATH_FAILURE_POLICY=Fail|Ignore] [OATH_QUORUM=2] [OATH_ATTEST_REPO=owner/repo] [OATH_PROGRAM=<id>] [OATH_MODE=enforce|audit] [OATH_AUDIT_SCHEDULE="*/30 * * * *"] [OATH_STALE_OK_HOURS=1] [OATH_LIMIT=1000] [OATH_ALLOWED_REGISTRIES=ghcr.io,host2] [OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'] deploy/install.sh
+# OATH_PROGRAM: experimental account-based backend instead of Memo scanning (README, "On-chain records"); empty = Memo (default).
 # SOLANA_RPC overrides OATH_NETWORK's default endpoint (comma-separate several for failover); useful against the public RPCs' rate limits.
 # Fail (default): if the webhook is unreachable, new pods are rejected. Ignore: they are admitted unchecked (use with `oath audit`).
 set -euo pipefail
@@ -15,6 +16,7 @@ OATH_ALLOWED_REGISTRIES="${OATH_ALLOWED_REGISTRIES:-}"   # e.g. ghcr.io,myregist
 OATH_MODE="${OATH_MODE:-enforce}"
 case "$OATH_MODE" in enforce|audit) ;; *) echo "OATH_MODE must be enforce or audit" >&2; exit 2;; esac
 OATH_ATTEST_REPO="${OATH_ATTEST_REPO:-}"
+OATH_PROGRAM="${OATH_PROGRAM:-}"
 case "$OATH_FAILURE_POLICY" in Fail|Ignore) ;; *) echo "OATH_FAILURE_POLICY must be Fail or Ignore" >&2; exit 2;; esac
 OATH_IMAGE="${OATH_IMAGE:-ghcr.io/tymofii-thc/oath-webhook:latest}"
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -47,7 +49,7 @@ rpc_sum="$(printf '%s' "$SOLANA_RPC" | sha256sum | cut -c1-16)"
 ca="$(base64 -w0 < "$tmp/ca.crt")"
 # values go into sed replacements: escape the characters that mean something there (a URL with ?a=1&b=2 would otherwise be mangled)
 esc() { printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'; }
-sed -e "s|__OATH_IMAGE__|$(esc "$OATH_IMAGE")|" -e "s|__OATH_SIGNER__|$(esc "$OATH_SIGNER")|" -e "s|__OATH_NETWORK__|$(esc "$OATH_NETWORK")|" -e "s|__FAILURE_POLICY__|$(esc "$OATH_FAILURE_POLICY")|" -e "s|__OATH_MODE__|$(esc "$OATH_MODE")|" -e "s|__OATH_QUORUM__|$(esc "$OATH_QUORUM")|" -e "s|__OATH_STALE_OK_HOURS__|$(esc "$OATH_STALE_OK_HOURS")|" -e "s|__OATH_LIMIT__|$(esc "$OATH_LIMIT")|" -e "s|__ALLOWED_REGISTRIES__|$(esc "$OATH_ALLOWED_REGISTRIES")|" -e "s|__OATH_ATTEST_REPO__|$(esc "$OATH_ATTEST_REPO")|" -e "s|__CA_BUNDLE__|$(esc "$ca")|" -e "s|__RPC_SUM__|$rpc_sum|" -e "s|__TLS_SUM__|$tls_sum|" -e "s|__AUTH_SUM__|$auth_sum|" "$here/k8s/oath.yaml" | kubectl apply -f -
+sed -e "s|__OATH_IMAGE__|$(esc "$OATH_IMAGE")|" -e "s|__OATH_SIGNER__|$(esc "$OATH_SIGNER")|" -e "s|__OATH_NETWORK__|$(esc "$OATH_NETWORK")|" -e "s|__FAILURE_POLICY__|$(esc "$OATH_FAILURE_POLICY")|" -e "s|__OATH_MODE__|$(esc "$OATH_MODE")|" -e "s|__OATH_QUORUM__|$(esc "$OATH_QUORUM")|" -e "s|__OATH_STALE_OK_HOURS__|$(esc "$OATH_STALE_OK_HOURS")|" -e "s|__OATH_LIMIT__|$(esc "$OATH_LIMIT")|" -e "s|__ALLOWED_REGISTRIES__|$(esc "$OATH_ALLOWED_REGISTRIES")|" -e "s|__OATH_ATTEST_REPO__|$(esc "$OATH_ATTEST_REPO")|" -e "s|__OATH_PROGRAM__|$(esc "$OATH_PROGRAM")|" -e "s|__CA_BUNDLE__|$(esc "$ca")|" -e "s|__RPC_SUM__|$rpc_sum|" -e "s|__TLS_SUM__|$tls_sum|" -e "s|__AUTH_SUM__|$auth_sum|" "$here/k8s/oath.yaml" | kubectl apply -f -
 kubectl -n "$ns" rollout status deploy/oath-webhook --timeout=120s
 # Pods that were already running are not seen by the webhook, so audit them: hourly by default, and once right now.
 # OATH_AUDIT_SCHEDULE is a cron expression; "off" skips the CronJob and the first run.

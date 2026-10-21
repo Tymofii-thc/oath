@@ -178,3 +178,23 @@ test("a slow lookup is answered with a clear denial before the API server's time
   assert.equal(audit.response.allowed, true);
   assert.ok(audit.response.warnings[0].includes("took longer"));
 });
+
+// --- OATH_PROGRAM / --program: the experimental account-based backend (lib/pda.mjs), stubbed via deps.findPda
+// so this stays an offline unit test; test/pda-local-validator.mjs and test/e2e-pda.sh exercise the real thing.
+test("programId routes lookups through deps.findPda instead of the Memo backend", async () => {
+  let calls = 0;
+  const findPda = async ({ digest, programId }) => { calls++; assert.equal(programId, "Prog1111"); return digest === D1 ? { signature: "onchain" } : null; };
+  const h = makeHandler({ signers: ["S"], rpcUrl: "x", programId: "Prog1111", deps: { resolveDigest: deps.resolveDigest, findPda } });
+  const ok = await h(pod(["ghcr.io/me/app:v1"]));
+  assert.equal(ok.response.allowed, true);
+  assert.equal(calls, 1);
+  const bad = await h(pod(["ghcr.io/me/evil:latest"]));
+  assert.equal(bad.response.allowed, false);
+});
+
+test("without programId, the Memo backend is used even if deps.findPda is given (it should never be called)", async () => {
+  const findPda = async () => { throw new Error("must not be called"); };
+  const h = makeHandler({ signers: ["S"], rpcUrl: "x", deps: { resolveDigest: deps.resolveDigest, findRecord: deps.findRecord, findPda } });
+  const r = await h(pod(["ghcr.io/me/app:v1"]));
+  assert.equal(r.response.allowed, true);
+});

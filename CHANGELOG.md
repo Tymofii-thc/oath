@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- **`--program <id>` (experimental): on-chain records instead of Memo transactions**, via a new native Solana program (`program/oath_records`, no Anchor). One account per `(signer, digest)`, looked up directly instead of scanned out of transaction history — this is what closes the "a revocation can be evicted by spamming the signer's address" gap in the Memo path (THREAT-MODEL.md). Opt-in on `oath anchor`/`verify`/`revoke` (or `OATH_PROGRAM`); every existing invocation without it is unaffected.
+  Deployed and tested live on devnet (`6n6fJ6WQgSQFie6BQHfGxFgw9groqusUgwC48Y7hgpJq`): anchor → verify → revoke → verify-again run for real, not mocked, plus a permanent regression (`test/live-devnet-pda.mjs`) and a from-scratch local-validator end-to-end run in CI (`test/e2e-pda.sh`). Also fixed a real bug caught in review before any of this shipped: padding a short commit hash with the ASCII digit `'0'` instead of a null byte would have silently truncated a genuine commit ending in zeros on read.
+  Honestly experimental: devnet only, no external audit, single upgrade-authority key (the existing CI key), and `--max-age`/`--attest` are Memo-only for now. See README, "On-chain records".
+- Webhook: warns on startup if `OATH_ALLOWED_REGISTRIES` is unset, the same way it already warns on `OATH_QUORUM=1` — SSRF via any image host is the default, and now says so loudly instead of only in THREAT-MODEL.md.
+- README: "why Solana, honestly" moved to the top (was buried in the threat model), with a named comparison against Rekor, cosign/policy-controller, and Kyverno instead of a vague differentiation.
+
 ## 0.3.3
 
 From an independent security review (every point was checked against the code first; the open ones are listed in THREAT-MODEL.md, "Not covered").
