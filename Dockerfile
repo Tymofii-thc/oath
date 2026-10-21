@@ -3,6 +3,8 @@
 # OATH_PROGRAM, because a webhook that silently can't do what its own documented env var promises is
 # worse than a slightly larger image. Without OATH_PROGRAM, it is simply unused at runtime.
 FROM node:26-alpine
+# fixed OS packages that the base image has not picked up yet (Trivy reported a MEDIUM in zlib on 2026-10-21)
+RUN apk upgrade --no-cache
 WORKDIR /oath
 COPY package.json package-lock.json ./
 # npm itself is not needed at runtime: removing it also removes its bundled (and often outdated) dependencies from the image
