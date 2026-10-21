@@ -828,23 +828,27 @@
     }
   }
 
-  /* ---------- "how it works" terminal loop (decorative; a real example is in the live verifier above) ----------
-     Every "out" line is what bin/oath.mjs prints (digests shortened with …, names generic): the real wording of init, VERIFIED and NOT
-     VERIFIED, no invented lines (the CLI prints no "exit code", so none is shown). No install log: the package
-     count changes with sigstore's own dependency tree, so a specific number here would eventually just be wrong. */
-  const FLOW_SCRIPT = [
-    { cmd: 'npm install -g oath-verify', out: [] },
+  /* ---------- "how it works" terminal (decorative; the real thing is the live verifier above) ----------
+     One step per screen, never all at once: type the command, show its output, hold, then the next step on a clean screen.
+     The box has ONE fixed size (the tallest step, measured for the current width), so nothing jumps or rescales between steps.
+     The wording is what bin/oath.mjs prints (digests shortened with …, names generic, no invented lines: the CLI prints no
+     "exit code"); the verdict word is set large, the same way the live terminal above shows it. */
+  const FLOW_STEPS = [
+    { cmd: 'npm install -g oath-verify', out: [] },   // no install log: its package count changes, a number here would go stale
     { cmd: 'oath init', out: [
       [null, 'Created a CI key: .oath/ci-key.json'],
+      [null, ''],
       [null, 'Public key (OATH_SIGNER, safe to share):'],
       [null, '  5D4W8x8UeqW3…ckFhoih'],
     ] },
     { cmd: 'oath verify --image ghcr.io/me/app:latest', out: [
-      ['good', 'VERIFIED  sha256:d9e853e8…e4b6bc'],
+      ['good verdict', 'VERIFIED'],
+      [null, 'sha256:d9e853e8…e4b6bc'],
       [null, '  built from commit 0123456789ab'],
     ] },
     { cmd: 'oath verify --image ghcr.io/me/app:swapped', out: [
-      ['badc', 'NOT VERIFIED  sha256:9f2c41ab…07d3e1'],
+      ['badc verdict', 'NOT VERIFIED'],
+      [null, 'sha256:9f2c41ab…07d3e1'],
       [null, '  No pipeline build with this digest for ghcr.io/me/app was anchored by 5D4W8x…hoih.'],
       [null, '  Refusing to proceed: the image may have been replaced outside the pipeline.'],
     ] },
@@ -852,19 +856,48 @@
   function initFlowDemo() {
     const out = $('flow-out');
     if (!out) return;
+    const body = out.parentElement;
+    const stepChip = $('flow-step');
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const outLine = (cls, text) => out.appendChild(ln(cls ? span(cls, text) : text));
+    const outLine = (cls, text) => {
+      const indented = /^ {2}/.test(text);
+      const row = ln(cls ? span(cls, text.trim()) : text.trim());
+      if (indented) row.classList.add('ind'); // wrapped lines keep their indent
+      return row;
+    };
+    const fill = (target, step) => {
+      target.appendChild(ln([span('prompt', '$ '), step.cmd]));
+      for (const [cls, text] of step.out) target.appendChild(text === '' ? ln(' ') : outLine(cls, text));
+    };
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      for (const step of FLOW_SCRIPT) {
-        out.appendChild(ln([span('prompt', '$ '), step.cmd]));
-        for (const [cls, text] of step.out) outLine(cls, text);
-      }
+      body.style.height = 'auto'; // no animation: all steps listed, each on its own
+      FLOW_STEPS.forEach((step, n) => {
+        if (n) out.appendChild(ln(' '));
+        fill(out, step);
+      });
       return;
     }
 
-    // Only the tab itself being backgrounded pauses this (not scroll position: pausing while merely off-screen left it
-    // looking frozen rather than paused, since a quick scroll-past stops it mid-character with no visual cue it would resume).
+    // one fixed size for the box: render every step invisibly at the current width and take the tallest
+    function fixSize() {
+      const cs = getComputedStyle(body);
+      const probe = document.createElement('pre');
+      // same width as the real text column (the body's padding is not part of it), or the narrow screens would wrap more than measured
+      probe.style.cssText = 'position:absolute;visibility:hidden;top:0;height:auto;left:' + cs.paddingLeft + ';right:' + cs.paddingRight + ';';
+      body.style.position = 'relative';
+      body.appendChild(probe);
+      let max = 0;
+      for (const step of FLOW_STEPS) { probe.replaceChildren(); fill(probe, step); max = Math.max(max, probe.scrollHeight); }
+      probe.remove();
+      body.style.height = Math.ceil(max + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) + 'px';
+    }
+    let resizeTimer;
+    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(fixSize, 150); });
+    (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(fixSize);
+    fixSize();
+
+    // only a hidden tab pauses it (pausing merely off-screen left it looking frozen)
     const waitVisible = async () => { while (document.hidden) await sleep(300); };
 
     async function typeLine(cmd) {
@@ -876,26 +909,26 @@
       for (const ch of cmd) {
         await waitVisible();
         text.textContent += ch;
-        await sleep(24 + Math.random() * 30);
+        await sleep(28 + Math.random() * 28);
       }
       cursor.classList.add('hidden');
     }
 
     (async function loop() {
       for (;;) {
-        out.replaceChildren();
-        for (const step of FLOW_SCRIPT) {
+        for (let n = 0; n < FLOW_STEPS.length; n++) {
+          const step = FLOW_STEPS[n];
           await waitVisible();
+          out.replaceChildren();
+          if (stepChip) stepChip.textContent = (n + 1) + ' / ' + FLOW_STEPS.length;
           await typeLine(step.cmd);
-          await sleep(260);
-          for (const [cls, text] of step.out) outLine(cls, text);
-          await sleep(850);
+          await sleep(320);
+          for (const [cls, text] of step.out) { out.appendChild(text === '' ? ln(' ') : outLine(cls, text)); }
+          await sleep(n >= 2 ? 3600 : 2400); // the two verdict screens stay longer
+          out.classList.add('clearing');
+          await sleep(300);
+          out.classList.remove('clearing');
         }
-        await sleep(2200);
-        const pre = out; // fade the whole block out, then clear and start over
-        pre.classList.add('clearing');
-        await sleep(350);
-        pre.classList.remove('clearing');
       }
     })();
   }

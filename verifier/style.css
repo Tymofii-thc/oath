@@ -220,7 +220,7 @@ details[open] > summary::before { transform: rotate(45deg); }
 /* how it works */
 .flow-lede { max-width: 54ch; margin: 0 0 24px; }
 .flow-term { max-width: 560px; margin: 0; transition: none; }
-.flow-term-body { min-height: 0; height: 248px; overflow: hidden; }
+.flow-term-body { flex: none; min-height: 0; height: 320px; overflow: hidden; } /* a fallback: the script sets the real height from the tallest step */
 .flow-term-body pre { height: 100%; }
 .term-dots { display: inline-flex; gap: 6px; margin-right: 2px; }
 .term-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--term-line); }
@@ -228,6 +228,8 @@ details[open] > summary::before { transform: rotate(45deg); }
 .term-dots i:nth-child(2) { background: #febc2e; }
 .term-dots i:nth-child(3) { background: #28c840; }
 .flow-term .term-bar { justify-content: flex-start; gap: 10px; }
+.flow-term .term-bar .chip { margin-left: auto; }
+.flow-term pre .ln.ind { padding-left: 2ch; }
 .flow-term .cursor { display: inline-block; width: 0.5em; height: 1.1em; margin-left: 1px; vertical-align: text-bottom; background: var(--term-text); animation: cursor-blink 1s step-end infinite; }
 .flow-term .cursor.hidden { visibility: hidden; }
 .flow-term pre.clearing { animation: term-clear 0.35s ease-in both; }
@@ -237,7 +239,7 @@ details[open] > summary::before { transform: rotate(45deg); }
   .flow-term .cursor { animation: none; opacity: 1; }
   .flow-term pre.clearing { animation: none; }
 }
-@media (max-width: 640px) { .flow-term-body { height: 272px; } }
+
 
 /* code + tabs */
 .code-block {
