@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs the oath admission webhook into the current kubectl context.
-# Usage: OATH_SIGNER=<pubkey[,pubkey]> [OATH_NETWORK=devnet|mainnet] [SOLANA_RPC=url[,url]] [OATH_IMAGE=…] [OATH_FAILURE_POLICY=Fail|Ignore] [OATH_QUORUM=2] [OATH_ATTEST_REPO=owner/repo] [OATH_PROGRAM=<id>] [OATH_MODE=enforce|audit] [OATH_AUDIT_SCHEDULE="*/30 * * * *"] [OATH_STALE_OK_HOURS=1] [OATH_LIMIT=1000] [OATH_ALLOWED_REGISTRIES=ghcr.io,host2] [OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'] deploy/install.sh
+# Usage: OATH_SIGNER=<pubkey[,pubkey]> [OATH_NETWORK=devnet|mainnet] [SOLANA_RPC=url[,url]] [OATH_IMAGE=…] [OATH_IMAGE_SIGNER=<pubkey> OATH_IMAGE_ATTEST=owner/repo/workflow.yml@refs/heads/main] [OATH_VERIFY_IMAGE=skip] [OATH_FAILURE_POLICY=Fail|Ignore] [OATH_QUORUM=2] [OATH_ATTEST_REPO=owner/repo] [OATH_PROGRAM=<id>] [OATH_MODE=enforce|audit] [OATH_AUDIT_SCHEDULE="*/30 * * * *"] [OATH_STALE_OK_HOURS=1] [OATH_LIMIT=1000] [OATH_ALLOWED_REGISTRIES=ghcr.io,host2] [OATH_REGISTRY_AUTH='{"ghcr.io":{"username":"u","password":"token"}}'] deploy/install.sh
 # OATH_PROGRAM: experimental account-based backend instead of Memo scanning (README, "On-chain records"); empty = Memo (default).
 # SOLANA_RPC overrides OATH_NETWORK's default endpoint (comma-separate several for failover); useful against the public RPCs' rate limits.
 # Fail (default): if the webhook is unreachable, new pods are rejected. Ignore: they are admitted unchecked (use with `oath audit`).
@@ -18,8 +18,48 @@ case "$OATH_MODE" in enforce|audit) ;; *) echo "OATH_MODE must be enforce or aud
 OATH_ATTEST_REPO="${OATH_ATTEST_REPO:-}"
 OATH_PROGRAM="${OATH_PROGRAM:-}"
 case "$OATH_FAILURE_POLICY" in Fail|Ignore) ;; *) echo "OATH_FAILURE_POLICY must be Fail or Ignore" >&2; exit 2;; esac
-OATH_IMAGE="${OATH_IMAGE:-ghcr.io/tymofii-thc/oath-webhook:latest}"
+OFFICIAL_IMAGE=ghcr.io/tymofii-thc/oath-webhook
+OATH_IMAGE="${OATH_IMAGE:-$OFFICIAL_IMAGE:latest}"
 here="$(cd "$(dirname "$0")" && pwd)"
+# The webhook is the gate for the whole cluster and its namespace is exempt from itself, so what runs there must be what the project's
+# pipeline built. The official image is therefore CHECKED before anything is installed (recorded on Solana by the project's CI key and
+# carrying a Sigstore build attestation from the release workflow on main) and installed by DIGEST, so the cluster runs exactly what was
+# checked and a moved tag changes nothing. Your own image: set OATH_IMAGE_SIGNER (and OATH_IMAGE_ATTEST) to check it against your pipeline;
+# without them a custom image is installed as given and the script says so. OATH_VERIFY_IMAGE=skip turns the check off (loudly).
+# The trust anchor is this script: take it from a tag or a commit you reviewed.
+case "$OATH_IMAGE" in "$OFFICIAL_IMAGE"|"$OFFICIAL_IMAGE":*|"$OFFICIAL_IMAGE"@*) official=1;; *) official=0;; esac
+if [ "$official" = 1 ] && [ -z "${OATH_IMAGE_SIGNER:-}" ]; then
+  OATH_IMAGE_SIGNER=5D4W8x8UeqW3qVi9uzNzvJPWiJZQaRWVR9ru2ckFhoih
+  OATH_IMAGE_ATTEST="${OATH_IMAGE_ATTEST:-Tymofii-thc/oath/.github/workflows/release-webhook.yml@refs/heads/main}"
+fi
+if [ "${OATH_VERIFY_IMAGE:-}" = skip ]; then
+  echo "WARNING: OATH_VERIFY_IMAGE=skip: the webhook image $OATH_IMAGE is installed WITHOUT checking that your pipeline built it." >&2
+elif [ -n "${OATH_IMAGE_SIGNER:-}" ]; then
+  root="$(cd "$here/.." && pwd)"
+  run_oath() {
+    if [ -n "${OATH_CLI:-}" ]; then $OATH_CLI "$@"
+    elif [ -d "$root/node_modules/sigstore" ] && command -v node >/dev/null 2>&1; then node "$root/bin/oath.mjs" "$@"
+    elif command -v npx >/dev/null 2>&1; then npx --yes "oath-verify@$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$root/package.json" | head -1)" "$@"
+    else echo "cannot check the webhook image: neither a checkout with node_modules nor npx is available (install Node, or set OATH_VERIFY_IMAGE=skip and accept the risk)" >&2; return 2
+    fi
+  }
+  echo "Checking the webhook image $OATH_IMAGE against its signer ${OATH_IMAGE_SIGNER}..."
+  vargs=(verify --signer "$OATH_IMAGE_SIGNER" --image "$OATH_IMAGE" --network "${OATH_IMAGE_NETWORK:-devnet}" --rpc "${OATH_IMAGE_RPC:-https://api.devnet.solana.com}")
+  [ -n "${OATH_IMAGE_ATTEST:-}" ] && vargs+=(--attest "$OATH_IMAGE_ATTEST")
+  if ! vout="$(OATH_QUIET=1 run_oath "${vargs[@]}")"; then
+    echo "$vout" >&2
+    echo "The webhook image $OATH_IMAGE is NOT verified: refusing to install it. (OATH_VERIFY_IMAGE=skip overrides, at your own risk.)" >&2
+    exit 1
+  fi
+  echo "$vout" | sed 's/^/  /'
+  vdigest="$(sed -n 's/^VERIFIED  \(sha256:[0-9a-f]\{64\}\).*/\1/p' <<<"$vout" | head -1)"
+  [ -n "$vdigest" ] || { echo "the check did not report a digest: refusing to install" >&2; exit 1; }
+  img_repo="${OATH_IMAGE%%@*}"; case "${img_repo##*/}" in *:*) img_repo="${img_repo%:*}";; esac
+  OATH_IMAGE="$img_repo@$vdigest"
+  echo "Installing exactly $OATH_IMAGE"
+else
+  echo "note: $OATH_IMAGE is a custom image: it is installed as given (set OATH_IMAGE_SIGNER to have it checked against your pipeline)." >&2
+fi
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 svc=oath-webhook; ns=oath-system
 

@@ -8,7 +8,7 @@ That a container image running in your cluster (or about to be deployed) is **on
 ## Trust assumptions
 - The CI signing key (and, with `--quorum`, the approver keys) are not controlled by the attacker.
 - The Solana RPC you query tells the truth. `--rpc a,b,c` is failover for availability, not a cross-check: the first answer wins, and the transaction is not verified cryptographically, so a lying RPC could fabricate a record. Use your own node or a provider you trust.
-- The webhook binary and its Kubernetes configuration are the ones you installed (the webhook image is built by this pipeline, but nothing checks that at install time: pin it by digest with `OATH_IMAGE=ghcr.io/…@sha256:…`).
+- The webhook binary and its Kubernetes configuration are the ones you installed (`deploy/install.sh` checks the official image before installing it, and installs it by digest: recorded by the project's CI key, with a Sigstore attestation from the `release-webhook` workflow on `main`; the published Helm chart ships a digest that its release job checked. The script itself is the trust anchor: take it from a tag or commit you reviewed. **tested** with a stand-in for the check in `test/install.test.mjs`; the real image check is run in CI).
 - **`--program` (experimental, README: "On-chain records") additionally assumes the deployed program's upgrade authority is not controlled by the attacker.** It currently is the project's own CI key (`66RLA5s2R3XHGG7KPzcEWqitDZ3bbBDcb2XPhDgNw7uj`) — the same key already trusted for Memo records, so this adds no new single point of failure, but it means the program has not been made immutable and has had no external audit.
 
 ## Attacks and what happens

@@ -1,8 +1,15 @@
 name: helm-release
 
 # Publishes the Helm chart as an OCI artifact: helm install oath oci://ghcr.io/tymofii-thc/charts/oath --version <v> ...
+# The chart ships with the webhook image pinned to a DIGEST that this job has first checked (recorded on Solana by the project's key,
+# Sigstore attestation from the release-webhook workflow on main). A manual run with publish=false only does the check and the pin.
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Push the chart to ghcr.io (false = only check and pin the image, then stop)
+        type: boolean
+        default: false
   push:
     tags: ["chart-v*"]
 
@@ -15,7 +22,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Check the webhook image and pin its digest in the chart
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNER: ${{ vars.OATH_SIGNER }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/oath-webhook"
+          out="$(node bin/oath.mjs verify --signer "$SIGNER" --image "$image:latest" --network devnet --rpc "${{ vars.SOLANA_RPC || 'https://api.devnet.solana.com' }}" --attest "$GITHUB_REPOSITORY/.github/workflows/release-webhook.yml@refs/heads/main")"
+          echo "$out"
+          digest="$(sed -n 's/^VERIFIED  \(sha256:[0-9a-f]\{64\}\).*/\1/p' <<<"$out" | head -1)"
+          [ -n "$digest" ] || { echo "the webhook image is not verified: not publishing a chart that points at it" >&2; exit 1; }
+          sed -i "s|^image: .*|image: $image@$digest|" deploy/helm/oath/values.yaml
+          grep '^image:' deploy/helm/oath/values.yaml
       - name: Package and push
+        if: github.event_name == 'push' || inputs.publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
