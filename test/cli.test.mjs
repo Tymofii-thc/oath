@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, readFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -155,4 +155,59 @@ test("verify --attest with a malformed requirement exits 2 before any network ca
   const r = await cli(["verify", "--signer", SIGNER, "--digest", D, "--attest", "me/app@main", "--rpc", "http://127.0.0.1:9"]);
   assert.equal(r.code, 2, r.out + r.err);
   assert.match(r.err, /full ref/);
+});
+
+// offline approvals through the real CLI: sign, verify, tamper, revoke; the "RPC" is unroutable and never used
+import { generateKeyPairSync } from "node:crypto";
+import { b58encode } from "../lib/approval.mjs";
+function keyFile(dir, name) {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const seed = privateKey.export({ format: "der", type: "pkcs8" }).subarray(-32), pub = publicKey.export({ format: "der", type: "spki" }).subarray(-32);
+  const file = join(dir, name);
+  writeFileSync(file, JSON.stringify([...Buffer.concat([seed, pub])]), { mode: 0o600 });
+  return { file, pub: b58encode(pub) };
+}
+
+test("oath approve + verify --approvals work offline and refuse everything else", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "oath-appr-cli-"));
+  const human = keyFile(dir, "human.json"), ci = keyFile(dir, "ci.json");
+  const img = `ghcr.io/me/app@${D}`;
+  const sign = (k, extra = []) => cli(["approve", "--image", "ghcr.io/me/app", "--digest", D, "--commit", "0123456789ab", "--key-file", k.file, ...extra]);
+  const okSign = await sign(human, ["--out", join(dir, "approval.json")]);
+  assert.equal(okSign.code, 0, okSign.err);
+  assert.match(okSign.out, new RegExp(`signed by ${human.pub}`));
+  const verify = (signer, path, extra = []) => cli(["verify", "--signer", signer, "--image", img, "--approvals", path, "--rpc", "http://127.0.0.1:9", ...extra]);
+
+  const good = await verify(human.pub, join(dir, "approval.json"));
+  assert.equal(good.code, 0, good.err + good.out);
+  assert.match(good.out, /VERIFIED/); assert.match(good.out, /checked offline/);
+
+  await sign(ci, ["--out", join(dir, "ci.json.approval")]);
+  writeFileSync(join(dir, "ci-approval.json"), readFileSync(join(dir, "ci.json.approval")));
+  const untrusted = await verify(human.pub, join(dir, "ci-approval.json"));
+  assert.equal(untrusted.code, 1, "an approval signed by a key you do not trust is worthless");
+
+  const tampered = JSON.parse(readFileSync(join(dir, "approval.json"), "utf8"));
+  tampered.message = tampered.message.replace("ghcr.io/me/app", "ghcr.io/me/evil");
+  writeFileSync(join(dir, "tampered.json"), JSON.stringify(tampered));
+  assert.equal((await verify(human.pub, join(dir, "tampered.json"))).code, 1, "an edited statement no longer verifies");
+
+  const rev = await cli(["approve", "--revoke", "--digest", D, "--reason", "backdoor", "--key-file", human.file, "--out", join(dir, "rev.json")]);
+  assert.equal(rev.code, 0, rev.err);
+  mkdirSync(join(dir, "both"));
+  writeFileSync(join(dir, "both", "a.json"), readFileSync(join(dir, "approval.json")));
+  writeFileSync(join(dir, "both", "r.json"), readFileSync(join(dir, "rev.json")));
+  const revoked = await verify(human.pub, join(dir, "both"));
+  assert.equal(revoked.code, 1);
+  assert.match(revoked.err, /REVOKED/); assert.match(revoked.err, /backdoor/);
+});
+
+test("--print-message needs no key, and --approvals refuses --max-age and --program", async () => {
+  const p = await cli(["approve", "--image", "ghcr.io/me/app", "--digest", D, "--commit", "0123456789ab", "--print-message"]);
+  assert.equal(p.code, 0, p.err);
+  assert.match(p.out, /^oath approval v1\nimage: ghcr\.io\/me\/app\ndigest: sha256:a{64}\ncommit: 0123456789ab\napproved: /);
+  const both = await cli(["verify", "--signer", SIGNER, "--digest", D, "--approvals", "/nonexistent", "--max-age", "7"]);
+  assert.equal(both.code, 2); assert.match(both.err, /--max-age does not work with --approvals/);
+  const two = await cli(["verify", "--signer", SIGNER, "--digest", D, "--approvals", "/nonexistent", "--program", "P"]);
+  assert.equal(two.code, 2); assert.match(two.err, /two different backends/);
 });

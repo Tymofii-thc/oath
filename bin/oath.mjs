@@ -27,6 +27,7 @@ import { sendMemo } from "../lib/memo.mjs";
 import { resolveDigest } from "../lib/registry.mjs";
 import { collectImages, listPodsInCluster } from "../lib/audit.mjs";
 import { verifyAttestation, parseAttestSpec } from "../lib/attest.mjs";
+import { approvalMessage, revocationMessage, signMessage, loadStatements, checkApprovals } from "../lib/approval.mjs";
 
 const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version; // the release the init output pins to, not a moving branch
 
@@ -123,8 +124,16 @@ async function verify() {
   // @solana/web3.js and a deployed program. Opt-in only: every existing invocation is unaffected.
   const programId = arg("program") || process.env.OATH_PROGRAM;
   if (programId && maxAgeDays) fail(2, "--max-age does not work with --program yet (an on-chain record has no trustworthy age: the time in it is supplied by the signer). Drop one of them; a security flag that is silently ignored would be worse than an error.");
+  // --approvals: offline signed approvals (lib/approval.mjs). No RPC, no chain: the signatures are checked locally.
+  const approvalsPath = arg("approvals") || process.env.OATH_APPROVALS;
+  if (approvalsPath && programId) fail(2, "--approvals and --program are two different backends: use one.");
+  if (approvalsPath && maxAgeDays) fail(2, "--max-age does not work with --approvals: every approval carries its own expiry date.");
   let check;
-  if (programId) {
+  if (approvalsPath) {
+    let statements;
+    try { statements = loadStatements(approvalsPath); } catch (e) { fail(2, `cannot read the approvals at ${approvalsPath}: ${e.message}`); }
+    check = checkApprovals({ statements, signers, digest: want, image: flag("no-bind") ? undefined : repo, quorum });
+  } else if (programId) {
     let pda;
     try { pda = await import("../lib/pda.mjs"); } catch (e) { fail(2, `--program needs @solana/web3.js: ${e.message}`); }
     try {
@@ -166,12 +175,16 @@ async function verify() {
       }
       if (!att.ok) {
         console.error(`NOT VERIFIED  ${want}`);
-        console.error(`  The digest is anchored on Solana, but the build attestation check failed: ${att.reason}`);
+        console.error(`  The digest is ${approvalsPath ? "approved" : "anchored on Solana"}, but the build attestation check failed: ${att.reason}`);
         process.exit(1);
       }
     }
     console.log(`VERIFIED  ${want}`);
-    if (programId) {
+    if (approvalsPath) {
+      console.log(`  approved by ${rec.signers.join(" + ")}${quorum > 1 ? `  (quorum ${rec.signers.length}/${quorum} met)` : ""}`);
+      console.log(`  commit ${rec.commit} (${rec.image}), approved ${rec.approvedAt}, valid until ${rec.expiresAt}`);
+      console.log("  checked offline: the signatures were verified here, nothing was asked of the network");
+    } else if (programId) {
       console.log(`  on-chain record (program ${programId}), commit ${rec.commit}`);
       console.log(`  by ${rec.signers.join(" + ")}${quorum > 1 ? `  (quorum ${rec.signers.length}/${quorum} met)` : ""}`);
       console.log("  note: --program is an experimental backend (direct account lookup, no transaction-history scan); see README.");
@@ -186,6 +199,11 @@ async function verify() {
   }
 
   console.error(`NOT VERIFIED  ${want}`);
+  if (approvalsPath) {
+    console.error(`  No valid approval for this digest${repo ? ` and ${repo}` : ""}: ${check.why}.`);
+    console.error("  Refusing to proceed: nobody you trust approved this image.");
+    process.exit(1);
+  }
   console.error(`  No pipeline build with this digest${repo ? ` for ${repo}` : ""} was anchored${programId ? ` on-chain (program ${programId})` : ""} by ${quorum > 1 ? `${quorum} of ` : ""}${signers.join(" / ")}${maxAgeDays && !programId ? ` in the last ${maxAgeDays} days` : ""}.`);
   console.error("  Refusing to proceed: the image may have been replaced outside the pipeline.");
   process.exit(1);
@@ -305,6 +323,39 @@ async function anchor() {
   } catch (e) {
     fail(2, `could not send the record: ${e.message}`);
   }
+}
+
+// Signs a statement about an image with a key: an approval (the digest may run) or, with --revoke, a revocation. Offline: no RPC, no chain.
+async function approveCmd() {
+  const printOnly = flag("print-message");
+  let message, name;
+  if (flag("revoke")) {
+    const digest = extractDigest(arg("digest"));
+    if (!digest) fail(2, "Missing --digest sha256:<64 hex>.");
+    try { message = revocationMessage({ digest, reason: arg("reason") || "" }); } catch (e) { fail(2, e.message); }
+    name = `oath-revocation-${digest.slice(7, 19)}.json`;
+  } else {
+    const image = arg("image");
+    if (!image) fail(2, "Missing --image <registry/name[:tag]> (the name the approval is for).");
+    let digest = arg("digest") ? extractDigest(arg("digest")) : extractDigest(image.match(/@sha256:[0-9a-fA-F]{64}$/)?.[0]);
+    if (arg("digest") && !digest) fail(2, "Bad --digest (expected sha256:<64 hex>).");
+    if (!digest) {
+      const local = localDigest(image);
+      if (local) digest = local.digest;
+      else { try { digest = await resolveDigest(image, { auths: registryAuths() }); } catch (e) { fail(2, `cannot get the digest of ${image}: ${e.message} (pass --digest)`); } }
+    }
+    let commit = arg("commit") || process.env.GITHUB_SHA || process.env.BUILD_SOURCEVERSION || process.env.CI_COMMIT_SHA || "";
+    if (!commit) { try { commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { /* not a checkout */ } }
+    try { message = approvalMessage({ image, digest, commit: commit.trim(), days: arg("days") ? Number(arg("days")) : 30 }); } catch (e) { fail(2, e.message); }
+    name = `oath-approval-${digest.slice(7, 19)}.json`;
+  }
+  if (printOnly) { console.log(message); return; } // paste it into a wallet's "sign message", or read it before you sign
+  const stmt = signMessage(message, readSecret());
+  const out = arg("out") || name;
+  writeFileSync(out, JSON.stringify(stmt, null, 2) + "\n");
+  console.log(`${flag("revoke") ? "Revocation" : "Approval"} signed by ${stmt.signer}`);
+  console.log(`File    : ${out}   (nothing was sent anywhere)`);
+  console.log(message.split("\n").slice(1).map((l) => "  " + l).join("\n"));
 }
 
 // Marks a digest as bad. Any trusted signer can do it; it takes effect for every later check.
@@ -488,11 +539,22 @@ const HELP = {
       ["--container <name>", "the image a running docker container uses"],
       ["--quorum <N>", "at least N different signers must have recorded it"],
       ["--max-age <days>", "ignore records older than this (Memo backend only)"],
+      ["--approvals <path>", "check signed approvals (a JSON file or a folder of them) offline instead of the chain; --signer lists the keys you trust"],
       ["--attest <spec>", "also require the Sigstore build attestation: owner/repo, or pin it with owner/repo/workflow.yml@refs/heads/main"],
       ["--no-bind", "do not require the record's image name to match the image"],
       ["--program <id>", "experimental: check the oath_records program instead of scanning Memo transaction history (or OATH_PROGRAM); see README"],
       ...NETWORK],
     ["Exit code: 0 verified, 1 not verified (stop the deploy), 2 error"]),
+  approve: help("oath approve: sign a statement about an image with a key (offline: no RPC, no chain). Verify it with `oath verify --approvals`.",
+    "oath approve --image <ref> [--digest sha256:…] [--commit <sha>] [--days 30] [--key-file <file>] [--out <file>]   |   oath approve --revoke --digest sha256:… --reason <text>", [
+      ["--image <ref>", "the image the approval is for (the name is part of what is signed)"],
+      ["--digest sha256:…", "default: the digest of the local docker copy, else the registry's"],
+      ["--commit <sha>", "default: GITHUB_SHA, BUILD_SOURCEVERSION, CI_COMMIT_SHA, or the current git commit"],
+      ["--days <n>", "how long the approval is valid (default 30, at most 366)"],
+      ["--revoke", "sign a revocation of --digest instead (final, from any trusted signer)"],
+      ["--print-message", "only print the text to be signed (to read it, or to sign it in a wallet); no key needed"],
+      ["--key-file <file>", "the signing key; default: the SOLANA_SECRET_KEY environment variable"],
+      ["--out <file>", "where to write the signed JSON (default oath-approval-<digest>.json)"]]),
   audit: help("oath audit: check every Pod that is already running in a Kubernetes cluster",
     "oath audit --signer <pubkey> [--in-cluster | --file pods.json] [--skip-namespaces a,b]", [
       ["--signer <key[,key]>", "public key(s) of the CI signer (or OATH_SIGNER)"],
@@ -518,6 +580,7 @@ const MAIN_HELP = [
   "Commands",
   "  init     create a CI key, fund it on devnet, print the setup steps",
   "  anchor   record a built image on Solana (in CI, after the build)",
+  "  approve  sign an approval (or a revocation) of an image with a key, offline",
   "  verify   check an image against the records (before deploy; exit 1 = not verified)",
   "  audit    check every Pod already running in a Kubernetes cluster",
   "  revoke   mark a digest as bad",
@@ -551,6 +614,8 @@ if (cmd === "verify") {
   await revoke();
 } else if (cmd === "anchor") {
   await anchor();
+} else if (cmd === "approve") {
+  await approveCmd();
 } else {
   console.error(`Unknown command "${cmd}".\n\n${MAIN_HELP.join("\n")}`);
   process.exit(2);

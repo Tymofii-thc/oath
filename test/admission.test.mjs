@@ -282,3 +282,43 @@ test("a volume swapped in place on UPDATE is checked, an unchanged one is not", 
   const same = podWithVolume("ghcr.io/me/app:v1", { operation: "UPDATE", oldObject: old });
   assert.equal((await mk()(same, "verdict")).response.allowed, true);
 });
+
+// signed approvals in a folder (a mounted ConfigMap): the webhook decides offline, it never asks the chain
+import { mkdtempSync as mkd, writeFileSync as wf } from "node:fs";
+import { tmpdir as td } from "node:os";
+import { join as jn } from "node:path";
+import { generateKeyPairSync } from "node:crypto";
+import { b58encode, approvalMessage, revocationMessage, signMessage } from "../lib/approval.mjs";
+
+function human() {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const seed = privateKey.export({ format: "der", type: "pkcs8" }).subarray(-32), pub = publicKey.export({ format: "der", type: "spki" }).subarray(-32);
+  return { secret: Buffer.concat([seed, pub]), pub: b58encode(pub) };
+}
+const approvalsDeps = { ...deps, findRecord: async () => { throw new Error("the chain must not be asked in approvals mode"); } };
+
+test("approvals mode: a digest approved by the trusted key is admitted, anything else is denied, with no chain lookup", async () => {
+  const h = human(), other = human(), dir = mkd(jn(td(), "oath-appr-"));
+  const sign = (k, o = {}) => signMessage(approvalMessage({ image: "ghcr.io/me/app", digest: D1, commit: "0123456789ab", ...o }), k.secret);
+  wf(jn(dir, "a.json"), JSON.stringify(sign(h)));
+  wf(jn(dir, "b.json"), JSON.stringify(signMessage(approvalMessage({ image: "ghcr.io/me/evil", digest: D2, commit: "0123456789ab" }), other.secret))); // valid signature, key not trusted
+  const handler = makeHandler({ signers: [h.pub], rpcUrl: "x", approvalsDir: dir, deps: approvalsDeps });
+  assert.equal((await handler(pod(["ghcr.io/me/app:v1"]), "verdict")).response.allowed, true);
+  const bad = await handler(pod(["ghcr.io/me/evil:latest"]), "verdict");
+  assert.equal(bad.response.allowed, false);
+  assert.match(bad.response.status.message, /no valid approval/);
+});
+
+test("approvals mode: expired approvals and revocations are honoured, and new files are picked up", async () => {
+  const h = human(), dir = mkd(jn(td(), "oath-appr-"));
+  wf(jn(dir, "old.json"), JSON.stringify(signMessage(approvalMessage({ image: "ghcr.io/me/app", digest: D1, commit: "0123456789ab", approved: new Date("2020-01-01T00:00:00Z"), days: 30 }), h.secret)));
+  const handler = makeHandler({ signers: [h.pub], rpcUrl: "x", cacheMs: 0, approvalsDir: dir, deps: approvalsDeps });
+  const expired = await handler(pod(["ghcr.io/me/app:v1"]), "verdict");
+  assert.equal(expired.response.allowed, false);
+  assert.match(expired.response.status.message, /expired/);
+});
+
+test("approvals mode cannot be combined with the chain backend or --max-age", () => {
+  assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "x", approvalsDir: "/tmp", programId: "P", deps }), /two different backends/);
+  assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "x", approvalsDir: "/tmp", maxAgeSeconds: 5, deps }), /expiry/);
+});
