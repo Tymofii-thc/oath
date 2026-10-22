@@ -23,7 +23,7 @@ A person signs a plain-text statement about an image digest with an Ed25519 key 
 | Steal the approver key | **Not stopped.** Use a hardware wallet or a key that is only ever on one machine; revoke what it approved; trust a new key |
 | Delete a revocation, or an approval, from the ConfigMap | Possible for anyone with RBAC on `oath-approvals`: they cannot forge a signature but can remove files. Restrict who may edit it. A revocation is final only while its file exists |
 | The RPC or the chain lies | Not a factor: approvals are checked locally, nothing is asked of the network |
-| Wallet "blind signing" | The statement is short readable text and the wallet shows it as a message, but a wallet that hides the message would reintroduce the problem. **Not tested with a real wallet yet** (the page uses the standard `signMessage`; exercised against a stand-in that signs with real Ed25519) |
+| Wallet "blind signing" | The statement is short readable text and the wallet shows it as a message, but a wallet that hides the message would reintroduce the problem. Tested once with a real Solana wallet through the page (2026-10-22: the signed file verified offline); other wallets and Ledger are untested |
 
 Approvals travel as small JSON files, so how they reach the webhook is part of the trust story: today a ConfigMap (re-read by the webhook within seconds of the kubelet syncing it, no result cache). Other carriers (an OCI artifact next to the image, a git repository) are not built.
 

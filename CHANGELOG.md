@@ -10,7 +10,7 @@
 - `oath approve --image <ref> --key-file <key>` signs an approval (`--revoke` a revocation, `--print-message` shows the text). `oath init --approver --offline` makes the key with no SOL and no network.
 - `oath verify --approvals <file or folder>` checks them (quorum, expiry, image name, revocation; `--max-age` and `--program` are refused with it).
 - Kubernetes: `OATH_APPROVALS=yes deploy/install.sh` (Helm `approvals=true`): the webhook reads the approvals from the ConfigMap `oath-approvals`, no result cache. Tested in a real kind cluster: nothing approved → denied; approved → admitted; another image → denied; revoked → denied; also run in CI.
-- The approve page has two new modes, "Approve a release (signed message)" and "Revoke (signed message)": the wallet signs the text, the page gives a file. Exercised against a stand-in wallet that signs with real Ed25519 (the CLI verifies what the page produces); **not yet with a real Phantom or Solflare**.
+- The approve page has two new modes, "Approve a release (signed message)" and "Revoke (signed message)": the wallet signs the text, the page gives a file. Tested with a real Solana wallet (2026-10-22): the file the page produced verified offline with the CLI. Other wallets and Ledger are untested.
 - The README is rewritten around this (a human approves, the runtime checks); the CI-signed Solana records are now described as the older, weaker mode.
 
 **Also in this release**
