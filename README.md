@@ -7,32 +7,50 @@
 
 **English** · [Українська](README.uk.md)
 
-*Don't deploy what the pipeline didn't build.*
+*Only releases a human approved can run.*
 
 > The version submitted to the hackathon is tagged [`hackathon-submission`](https://github.com/Tymofii-thc/oath/tree/hackathon-submission). `main` contains later security fixes (see [THREAT-MODEL.md](THREAT-MODEL.md)).
 
-Oath stops a container image from reaching production unless your CI recorded it (a signed record of its digest on Solana). Live verifier: **https://tymofii-thc.github.io/oath/**
+**oath: only releases a human approved can run.**
 
-**Problem.** A swapped image in the registry, a manual `docker push` that bypasses CI, a compromised token: nobody notices that production runs something other than what was built. That is a supply-chain attack, and the code in git can be perfectly clean.
-
-**Solution.** Every CI build records `commit → image digest → time` on Solana as a standard Memo transaction signed by the CI key (no custom smart contract). Before deploy, `oath verify` checks the digest of the image about to run against those records and **stops the deploy** if there is none.
+CI builds an image. A person looks at the build and approves its digest by signing it with their own key (a Solana wallet such as Phantom or Solflare, or a key file). The place where images run (the Kubernetes webhook, or a guard in front of `docker run`) checks that signature and refuses everything else. The approver's key is not in CI, so whoever takes over your pipeline, steals the CI key or the registry password still cannot get an image accepted. Live verifier: **https://tymofii-thc.github.io/oath/**
 
 ```
-build ──► image digest ──► Solana Memo tx (signed by the CI key)
-                                  │
-deploy ──► docker pull ──► oath verify ──► ✔ exit 0  → deploy proceeds
-                                         ✘ exit 1  → deploy stopped
+build (CI) ──► image digest ──► a human reviews it and signs the digest (wallet or CLI) ──► approval (a small JSON file)
+run  (Kubernetes webhook, or a guard before docker run) ──► checks the signature, offline ──► ✔ runs   ✘ refused
 ```
 
-**Why Solana, honestly.** Not for extra cryptographic security — a signed, append-only log (what Sigstore's Rekor already is) gives the same tamper-evidence, and oath does not cryptographically verify the chain either: the RPC answer is trusted, not light-client-checked (see THREAT-MODEL.md, "Trust assumptions"). What a public ledger buys instead is a trust root nobody operates: records live on thousands of independent validators, not a server we (or anyone) can quietly edit or take offline, and anyone can read or verify them with no account. Named comparisons, since vague "decentralization" isn't an answer:
-- **Sigstore/Rekor** is the closest cousin, and also a public transparency log — the difference is operational (no Sigstore-project infrastructure to depend on), not cryptographic. oath also *uses* Sigstore itself (`--attest`, for build provenance); it is not a replacement for it.
-- **cosign + policy-controller, Kyverno, Connaisseur** are mature, free, widely-adopted Kubernetes admission webhooks that already verify image signatures/attestations. oath's webhook does the same policy job; what differs is the backing store (a public ledger instead of a registry-attached signature), not the enforcement model.
+**Why the signer must not be the pipeline.** If one pipeline builds, signs and then checks, it checks itself: anyone who controls it controls the signature and can delete the check. The signature only means something when the signer is a party the attacker does not control, and the check happens somewhere the attacker does not reach.
 
-If you already run Rekor or one of those webhooks, this isn't a reason to switch. It's for teams who want a provenance gate without standing up that infrastructure.
+**What it stops** (with approvals and the Kubernetes webhook; each tested in a real cluster): a taken-over pipeline or a stolen CI key, a stolen registry password and an image pushed under an existing tag, an image swapped inside a running Pod, a second webhook that rewrites the image after oath looked at it.
+**What it does not stop:** a human who approves a bad build (you approve a digest, not the code), a stolen approver key, anyone with cluster-admin (they can remove the webhook), and platforms that have no place to hook a check (Azure Container Apps, Cloud Run, plain docker: there oath is only a checkpoint and a periodic check, the real lock is who may deploy). No tool gives 100%; THREAT-MODEL.md lists what is covered and what is not.
 
-**Install:** `npm install -g oath-verify` gives you the `oath` command. Or skip the install and put `npx --yes oath-verify` in front of any command below (handy in CI: pin it as `npx --yes oath-verify@0.4.0`). In a clone, `node bin/oath.mjs` is the same thing. `oath` below means any of these.
+**Two kinds of records.**
+1. **Human approvals (recommended).** Ed25519-signed plain text, checked **offline**: no RPC, no chain, no network. The text is what the wallet shows before it signs. Approvals expire (at most a year) and can be revoked.
+2. **CI-signed records on Solana (the older mode, below).** CI writes the digest to a Solana Memo. That protects against an attacker *outside* your pipeline (a stolen registry password, a swapped tag) but not against one who controls it, and the chain answer is trusted, not verified (see THREAT-MODEL.md). Useful as a public audit trail; weak as a lock unless you add a second, human key (`--quorum 2`).
 
-## Set up in 3 steps
+**Why Solana at all, honestly.** The approvals above do not need it: they are plain signatures. Solana is where a wallet key comes from (a signature from Phantom or Solflare is exactly this kind of signature), what the optional CI-signed records and the on-chain program use, and a place to publish approvals publicly. Sigstore/cosign, Kyverno, Connaisseur, policy-controller and Ratify are mature, free admission tools that verify signatures too; if you already run one, you do not need oath. What oath tries to add is the human-wallet approval as a first-class, readable step.
+
+**Install:** `npm install -g oath-verify` gives you the `oath` command. Or skip the install and put `npx --yes oath-verify` in front of any command below (handy in CI: pin it as `npx --yes oath-verify@0.5.0`). In a clone, `node bin/oath.mjs` is the same thing. `oath` below means any of these.
+
+## Human-approved releases: quick start
+```bash
+# 1. once: the approver's key (offline, no SOL, no network). Keep it OFF CI.
+oath init --approver --offline                     # prints the public key and the next steps
+
+# 2. after a build you reviewed: sign its digest
+oath approve --image ghcr.io/me/app:latest --key-file .oath/approver-key.json     # writes oath-approval-<digest>.json
+#    or in the browser with Phantom / Solflare: https://tymofii-thc.github.io/oath/approve.html (mode "Approve a release (signed message)")
+
+# 3a. Kubernetes: the webhook checks the approvals (a folder in a ConfigMap), no chain, no RPC
+OATH_SIGNER=<approver public key> OATH_APPROVALS=yes deploy/install.sh
+kubectl -n oath-system create configmap oath-approvals --from-file=<folder of approvals> --dry-run=client -o yaml | kubectl apply -f -
+# 3b. anywhere else: a guard before the deploy or the start of the container
+oath verify --signer <approver public key> --image ghcr.io/me/app@sha256:… --approvals <file or folder> && docker run …
+```
+Helm (chart 0.3.2 or later): `--set approvals=true --set signer=<approver public key>`. The approver key is the **only** trusted key in this mode: the CI key means nothing to the cluster. An approval names the image and the digest, expires (default 30 days, `--days`), and a revocation (`oath approve --revoke --digest … --reason …`) by a trusted key is final while its file is there. A ConfigMap can only be changed by someone with RBAC on it: they cannot forge an approval (signatures), but they can delete a revocation or an approval, so restrict who may edit `oath-approvals` in `oath-system`. Tested in a real kind cluster: nothing approved → denied; approved → admitted; another image → denied; revoked → denied; and a pipeline holding the CI key and editing any workflow cannot get an image accepted. **Not tested with a real wallet yet:** the page uses the wallet's standard `signMessage` (Phantom and Solflare provide it) and was exercised against a stand-in that signs with real Ed25519; the files it produces verify with the CLI.
+
+## CI-signed records on Solana (the older mode): set up in 3 steps
 
 **1. A CI key** (once, about a minute):
 ```bash

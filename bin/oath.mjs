@@ -27,7 +27,8 @@ import { sendMemo } from "../lib/memo.mjs";
 import { resolveDigest } from "../lib/registry.mjs";
 import { collectImages, listPodsInCluster } from "../lib/audit.mjs";
 import { verifyAttestation, parseAttestSpec } from "../lib/attest.mjs";
-import { approvalMessage, revocationMessage, signMessage, loadStatements, checkApprovals } from "../lib/approval.mjs";
+import { approvalMessage, revocationMessage, signMessage, loadStatements, checkApprovals, b58encode } from "../lib/approval.mjs";
+import { generateKeyPairSync } from "node:crypto";
 
 const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version; // the release the init output pins to, not a moving branch
 
@@ -397,8 +398,43 @@ async function revoke() {
 }
 
 // One-command setup: a CI key in a file (the secret is never printed), a funded devnet balance, and the exact next steps.
+// An approver key for signed approvals: no chain, no SOL, no network, no @solana/web3.js.
+function initOffline(out) {
+  let pub;
+  if (existsSync(out)) {
+    console.log(`Using the existing key: ${out}`);
+    pub = b58encode(Uint8Array.from(JSON.parse(readFileSync(out, "utf8"))).subarray(32));
+  } else {
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const seed = privateKey.export({ format: "der", type: "pkcs8" }).subarray(-32);
+    const raw = publicKey.export({ format: "der", type: "spki" }).subarray(-32);
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, JSON.stringify([...Buffer.concat([seed, raw])]), { mode: 0o600 });
+    pub = b58encode(raw);
+    console.log(`Created an approver key: ${out}   (never printed; keep it out of git, CI and chat)`);
+    try {
+      const entry = dirname(out) === "." ? out : dirname(out).split("/")[0] + "/";
+      const cur = existsSync(".gitignore") ? readFileSync(".gitignore", "utf8") : "";
+      if (!cur.split("\n").includes(entry)) appendFileSync(".gitignore", (cur && !cur.endsWith("\n") ? "\n" : "") + entry + "\n");
+    } catch { /* not fatal */ }
+  }
+  console.log(`\nPublic key (the approver, safe to share):\n  ${pub}\n`);
+  console.log("Next steps. This key is the ONLY one you trust; it stays off CI.");
+  console.log("");
+  console.log("1  Approve a build (after you looked at it):");
+  console.log(`     oath approve --image ghcr.io/me/app:latest --key-file ${out}`);
+  console.log("   or with a Solana wallet in the browser (Phantom, Solflare): https://tymofii-thc.github.io/oath/approve.html");
+  console.log("");
+  console.log("2  Let the place where images run check it:");
+  console.log(`     Kubernetes:  OATH_SIGNER=${pub} OATH_APPROVALS=yes deploy/install.sh`);
+  console.log("                  kubectl -n oath-system create configmap oath-approvals --from-file=<folder of approvals> --dry-run=client -o yaml | kubectl apply -f -");
+  console.log("     anywhere:    oath verify --signer " + pub + " --image <name>@sha256:… --approvals <file or folder>   (before 'docker run' / deploy)");
+  process.exit(0);
+}
+
 async function init() {
   const approver = flag("approver"); // a second, independent key for --quorum: never goes into CI secrets
+  if (approver && flag("offline")) return initOffline(arg("out") || ".oath/approver-key.json");
   const out = arg("out") || (approver ? ".oath/approver-key.json" : ".oath/ci-key.json");
   const network = arg("network") || "devnet";
   let web3;
@@ -517,6 +553,7 @@ const HELP = {
   init: help("oath init: create a CI key, fund it on devnet, print the setup steps",
     "oath init [--approver] [--out <file>] [--set-github] [--no-wait]", [
       ["--approver", "make the second key for --quorum 2 instead (it must stay out of CI secrets)"],
+      ["--offline", "with --approver: just make the key for signed approvals (no chain, no SOL, no network)"],
       ["--out <file>", "where to write the key (default .oath/ci-key.json, or .oath/approver-key.json)"],
       ["--set-github", "also set the GitHub secret and variable (needs the gh CLI, logged in)"],
       ["--no-wait", "do not wait for the key to be funded"],

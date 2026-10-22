@@ -1,7 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
+**Human-approved releases (new, the recommended mode).** A person approves an image digest by signing a short plain-text statement with an Ed25519 key (a Solana wallet key works: Phantom and Solflare sign messages); the place where images run checks it **offline**, with no RPC, no chain and no network. The trusted keys are only the approvers', so a taken-over pipeline, the CI key or the registry password do not matter to the cluster.
+- `oath approve --image <ref> --key-file <key>` signs an approval (`--revoke` a revocation, `--print-message` shows the text). `oath init --approver --offline` makes the key with no SOL and no network.
+- `oath verify --approvals <file or folder>` checks them (quorum, expiry, image name, revocation; `--max-age` and `--program` are refused with it).
+- Kubernetes: `OATH_APPROVALS=yes deploy/install.sh` (Helm `approvals=true`): the webhook reads the approvals from the ConfigMap `oath-approvals`, no result cache. Tested in a real kind cluster: nothing approved → denied; approved → admitted; another image → denied; revoked → denied; also run in CI.
+- The approve page has two new modes, "Approve a release (signed message)" and "Revoke (signed message)": the wallet signs the text, the page gives a file. Exercised against a stand-in wallet that signs with real Ed25519 (the CLI verifies what the page produces); **not yet with a real Phantom or Solflare**.
+- The README is rewritten around this (a human approves, the runtime checks); the CI-signed Solana records are now described as the older, weaker mode.
+
+**Also in this release**
 - The browser verifier shows `REVOKED` (a revocation signed by the entered signer wins over a record).
 - Image volumes (`volumes[].image.reference`) are verified and pinned like container images (tested in a kind cluster with ImageVolume on).
 - `oath init` prints `Tymofii-thc/oath@v<version>` for the actions instead of `@main`; the docs pin `@v0.4.0`.

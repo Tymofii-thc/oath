@@ -11,6 +11,23 @@ That a container image running in your cluster (or about to be deployed) is **on
 - The webhook binary and its Kubernetes configuration are the ones you installed (`deploy/install.sh` checks the official image before installing it, and installs it by digest: recorded by the project's CI key, with a Sigstore attestation from the `release-webhook` workflow on `main`; the published Helm chart ships a digest that its release job checked. The script itself is the trust anchor: take it from a tag or commit you reviewed. **tested** with a stand-in for the check in `test/install.test.mjs`; the real image check is run in CI).
 - **`--program` (experimental, README: "On-chain records") additionally assumes the deployed program's upgrade authority is not controlled by the attacker.** The current devnet deployment `EWse8WXE3BYTeLvyDHufhp1Z73Pjqiq7nohAPE4cLSEc` (2026-10-21) has a single upgrade authority, `CTjTMp3huaSu7fdFo1N7xM1fYhdjzKKX9LudZzh2Cm6w`: a key file on the maintainer's machine (no recovery phrase), not the CI key and not in GitHub. It is not frozen and has had no audit. The first deployment `6n6fJ6WQ…` is deprecated: it has the pre-funding flaw, and its authority (`66RLA5s2…`, an earlier version of this document wrongly called it the CI key) is a key the maintainer does not have, so it cannot be fixed.
 
+## Human approvals (the recommended mode)
+A person signs a plain-text statement about an image digest with an Ed25519 key (a Solana wallet key works); the place where images run checks the signature **offline**. The trusted keys are only the approvers' keys, so the CI key, the pipeline and the registry are outside the trust base.
+
+| Attack | Result |
+|---|---|
+| Take over the pipeline or steal the CI key, build and sign a malicious image | Refused: the CI key is not a trusted signer (**tested** in a kind cluster: an attacker holding the CI key and free to edit any workflow cannot get an image accepted) |
+| Steal the registry password and push an image, or overwrite a tag | Refused: the approval names the digest, a new digest has no approval (**tested**) |
+| Forge or edit an approval | Refused: the signature covers the whole text; a changed digest, image or date no longer verifies (**tested**) |
+| Replay an old approval | Limited: approvals expire (default 30 days, at most 366); revoke a digest you no longer want |
+| Approve a bad build | **Not stopped.** The human approves a digest, not the code: the review before signing is the control |
+| Steal the approver key | **Not stopped.** Use a hardware wallet or a key that is only ever on one machine; revoke what it approved; trust a new key |
+| Delete a revocation, or an approval, from the ConfigMap | Possible for anyone with RBAC on `oath-approvals`: they cannot forge a signature but can remove files. Restrict who may edit it. A revocation is final only while its file exists |
+| The RPC or the chain lies | Not a factor: approvals are checked locally, nothing is asked of the network |
+| Wallet "blind signing" | The statement is short readable text and the wallet shows it as a message, but a wallet that hides the message would reintroduce the problem. **Not tested with a real wallet yet** (the page uses the standard `signMessage`; exercised against a stand-in that signs with real Ed25519) |
+
+Approvals travel as small JSON files, so how they reach the webhook is part of the trust story: today a ConfigMap (re-read by the webhook within seconds of the kubelet syncing it, no result cache). Other carriers (an OCI artifact next to the image, a git repository) are not built.
+
 ## Attacks and what happens
 
 | Attack | Result |

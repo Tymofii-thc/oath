@@ -28,7 +28,7 @@ steps:
 
   - script: |
       set -e   # without it a failed anchor would not fail this step
-      out=$(npx --yes oath-verify@0.4.0 anchor --image $(image):$(Build.BuildId))
+      out=$(npx --yes oath-verify@0.5.0 anchor --image $(image):$(Build.BuildId))
       echo "$out"
       echo "##vso[task.setvariable variable=digest]$(echo "$out" | sed -n 's/^Digest  *: //p')"
     displayName: Record the digest on Solana (keeps the digest for the next steps)
@@ -38,7 +38,7 @@ steps:
       OATH_REGISTRY_AUTH: $(OATH_REGISTRY_AUTH)
 
   # Verify and deploy the SAME digest, never the tag: a tag can be moved in the registry between the two steps.
-  - script: npx --yes oath-verify@0.4.0 verify --signer $(OATH_SIGNER) --image $(image)@$(digest)
+  - script: npx --yes oath-verify@0.5.0 verify --signer $(OATH_SIGNER) --image $(image)@$(digest)
     displayName: Verify before deploy (a non-zero exit stops the pipeline)
 
   # your deploy goes here, with the same ref: az containerapp update --image $(image)@$(digest) ...
