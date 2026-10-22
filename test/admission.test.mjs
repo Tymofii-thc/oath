@@ -322,3 +322,18 @@ test("approvals mode cannot be combined with the chain backend or --max-age", ()
   assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "x", approvalsDir: "/tmp", programId: "P", deps }), /two different backends/);
   assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "x", approvalsDir: "/tmp", maxAgeSeconds: 5, deps }), /expiry/);
 });
+
+test("approvals mode has no result cache: a new approval and a revocation count at once", async () => {
+  const h = human(), dir = mkd(jn(td(), "oath-appr-"));
+  const handler = makeHandler({ signers: [h.pub], rpcUrl: "x", approvalsDir: dir, deps: approvalsDeps });
+  const req = () => handler(pod(["ghcr.io/me/app:v1"]), "verdict");
+  assert.equal((await req()).response.allowed, false, "nothing approved yet");
+  wf(jn(dir, "a.json"), JSON.stringify(signMessage(approvalMessage({ image: "ghcr.io/me/app", digest: D1, commit: "0123456789ab" }), h.secret)));
+  await new Promise((r) => setTimeout(r, 5200)); // the folder listing is re-read every 5 s
+  assert.equal((await req()).response.allowed, true, "the miss was not remembered");
+  wf(jn(dir, "r.json"), JSON.stringify(signMessage(revocationMessage({ digest: D1, reason: "bad" }), h.secret)));
+  await new Promise((r) => setTimeout(r, 5200));
+  const after = await req();
+  assert.equal(after.response.allowed, false);
+  assert.match(after.response.status.message, /revoked by/);
+});

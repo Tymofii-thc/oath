@@ -60,4 +60,32 @@ kubectl -n oath-system rollout status deploy/oath-webhook --timeout=60s >/dev/nu
 kubectl run pda-ok --image="$PDA_IMG@$PDA_OK" --restart=Never >/dev/null 2>&1; check "OATH_PROGRAM: anchored (never revoked) digest admitted" 0 $?
 kubectl run pda-revoked --image="$PDA_IMG@$PDA_REVOKED" --restart=Never >/dev/null 2>&1; check "OATH_PROGRAM: revoked digest denied" 1 $?
 
+# Human-approved releases: the webhook decides from signed approvals in a ConfigMap, with no chain and no RPC at all.
+# The only trusted key is a fresh "human" key; whoever controls the pipeline (and its key) cannot change what the cluster accepts.
+case "$OK_IMAGE" in
+  *@sha256:*)
+    adir="$(mktemp -d)"; mkdir "$adir/files"
+    node --input-type=module -e '
+      import { generateKeyPairSync } from "node:crypto"; import { writeFileSync } from "node:fs"; import { b58encode } from "'"$root"'/lib/approval.mjs";
+      const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+      const seed = privateKey.export({ format: "der", type: "pkcs8" }).subarray(-32), pub = publicKey.export({ format: "der", type: "spki" }).subarray(-32);
+      writeFileSync("'"$adir"'/human.json", JSON.stringify([...Buffer.concat([seed, pub])]), { mode: 0o600 }); writeFileSync("'"$adir"'/human.pub", b58encode(pub));'
+    HUMAN="$(cat "$adir/human.pub")"
+    OATH_SIGNER=$HUMAN OATH_IMAGE=oath:e2e OATH_APPROVALS=yes "$root/deploy/install.sh" >/dev/null 2>&1
+    kubectl -n oath-system rollout status deploy/oath-webhook --timeout=90s >/dev/null 2>&1
+    waitfile() { for _ in $(seq 1 40); do kubectl -n oath-system exec deploy/oath-webhook -- ls /approvals 2>/dev/null | grep -q "$1" && return 0; sleep 3; done; return 1; }
+    kubectl run appr-none --image="$OK_IMAGE" --restart=Never >/dev/null 2>&1; check "approvals: nothing approved yet -> denied" 1 $?
+    SOLANA_SECRET_KEY="$(cat "$adir/human.json")" node "$root/bin/oath.mjs" approve --image "${OK_IMAGE%@*}" --digest "${OK_IMAGE#*@}" --commit 0123456789ab --out "$adir/files/approval.json" >/dev/null 2>&1
+    kubectl -n oath-system create configmap oath-approvals --from-file="$adir/files" --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+    waitfile approval.json; sleep 7
+    kubectl run appr-ok --image="$OK_IMAGE" --restart=Never -- sleep 20 >/dev/null 2>&1; check "approvals: a digest the human approved is admitted" 0 $?
+    kubectl run appr-bad --image="$BAD_IMAGE" --restart=Never >/dev/null 2>&1; check "approvals: an image nobody approved is denied" 1 $?
+    SOLANA_SECRET_KEY="$(cat "$adir/human.json")" node "$root/bin/oath.mjs" approve --revoke --digest "${OK_IMAGE#*@}" --reason e2e --out "$adir/files/revoke.json" >/dev/null 2>&1
+    kubectl -n oath-system create configmap oath-approvals --from-file="$adir/files" --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+    waitfile revoke.json; sleep 7
+    kubectl run appr-rev --image="$OK_IMAGE" --restart=Never >/dev/null 2>&1; check "approvals: a revoked digest is denied" 1 $?
+    rm -rf "$adir";;
+  *) echo "SKIP  approvals (OK_IMAGE is not a digest reference)";;
+esac
+
 [ $fails -eq 0 ] && echo "ALL PASSED" || { echo "$fails FAILED"; exit 1; }

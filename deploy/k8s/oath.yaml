@@ -44,6 +44,7 @@ spec:
             - { name: OATH_LIMIT, value: "__OATH_LIMIT__" }          # transactions scanned per signer (spam on the signer address can push old records out of the window)
             - { name: OATH_QUORUM, value: "__OATH_QUORUM__" }      # distinct signers that must have anchored the digest (2 = CI key + approver key)
             - { name: OATH_ATTEST_REPO, value: "__OATH_ATTEST_REPO__" }  # owner/repo whose GitHub Actions must have signed a build attestation (empty = not required)
+            - { name: OATH_APPROVALS_DIR, value: "__APPROVALS_DIR__" }  # signed approvals instead of the chain: /approvals (the ConfigMap oath-approvals) or empty (README: "Human-approved releases")
             - { name: OATH_PROGRAM, value: "__OATH_PROGRAM__" }         # experimental account-based backend (README: "On-chain records"); empty = Memo (default)
           ports: [{ containerPort: 8443 }]
           readinessProbe:
@@ -59,9 +60,12 @@ spec:
             capabilities: { drop: [ALL] }
           volumeMounts:
             - { name: tls, mountPath: /tls, readOnly: true }
+            - { name: approvals, mountPath: /approvals, readOnly: true }
       volumes:
         - name: tls
           secret: { secretName: oath-webhook-tls }
+        - name: approvals
+          configMap: { name: oath-approvals, optional: true }
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget

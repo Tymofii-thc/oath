@@ -69,6 +69,7 @@ spec:
             - { name: OATH_LIMIT, value: {{ .Values.scanLimit | quote }} }
             - { name: OATH_QUORUM, value: {{ .Values.quorum | quote }} }
             - { name: OATH_ATTEST_REPO, value: {{ .Values.attestRepo | quote }} }
+            - { name: OATH_APPROVALS_DIR, value: {{ ternary "/approvals" "" .Values.approvals | quote }} }
             - { name: OATH_PROGRAM, value: {{ .Values.program | quote }} }
             {{- if or .Values.registryAuth .Values.registryAuthSecret }}
             - name: OATH_REGISTRY_AUTH
@@ -88,9 +89,12 @@ spec:
             capabilities: { drop: [ALL] }
           volumeMounts:
             - { name: tls, mountPath: /tls, readOnly: true }
+            - { name: approvals, mountPath: /approvals, readOnly: true }
       volumes:
         - name: tls
           secret: { secretName: oath-webhook-tls }
+        - name: approvals
+          configMap: { name: oath-approvals, optional: true }
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
