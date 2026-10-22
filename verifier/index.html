@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>Oath — proof of deploy</title>
-<meta name="description" content="Oath records every CI build digest on Solana and blocks deploys of images the pipeline did not build.">
+<title>Oath — releases a human approved</title>
+<meta name="description" content="Oath runs only the container images a human approved: the approver signs a digest with a wallet, the cluster checks the signature offline and refuses everything else.">
 <meta property="og:title" content="oath.">
-<meta property="og:description" content="Don't deploy what the pipeline didn't build.">
+<meta property="og:description" content="Only releases a human approved can run.">
 <meta property="og:image" content="https://tymofii-thc.github.io/oath/assets/social-preview.png">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -42,9 +42,9 @@
 
   <section class="hero" aria-labelledby="hero-h">
     <div class="wrap hero-grid">
-      <h1 id="hero-h" data-i18n="hero_h1">Don't deploy what the pipeline didn't build.</h1>
+      <h1 id="hero-h" data-i18n="hero_h1">Only releases a human approved can run.</h1>
       <div class="hero-side">
-        <p class="lead" data-i18n="hero_p">Every CI build writes its image digest to Solana. Before deploy, oath verify or a Kubernetes webhook blocks any image with no record.</p>
+        <p class="lead" data-i18n="hero_p">CI builds the image. A person approves its digest by signing it with a wallet. The cluster checks that signature, offline, and refuses everything else.</p>
         <div class="cta">
           <a class="btn primary" href="#setup" data-i18n="cta_docs">How to set it up</a>
           <button type="button" class="btn" id="cta-run" data-i18n="cta_run">Try the verifier</button>
