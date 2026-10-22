@@ -15,7 +15,6 @@
 //          --attest <owner/repo>  also require a Sigstore-signed SLSA build attestation from that repo's GitHub Actions
 //          --no-bind  (don't require the record's image name to match the image being checked)
 // Env:     OATH_SIGNER (comma separated), OATH_NETWORK, SOLANA_RPC, OATH_QUORUM, OATH_ATTEST_REPO, GITHUB_TOKEN (optional, API rate limit)
-//          OATH_PROGRAM (experimental: account-based backend instead of Memo transaction scanning; see README, "On-chain records")
 //
 // Exit codes: 0 = verified, 1 = NOT verified, 2 = usage / network error.
 // Put it right before your deploy step: if it exits non-zero, the deploy stops.
@@ -120,28 +119,14 @@ async function verify() {
   const quorum = Number(arg("quorum") || process.env.OATH_QUORUM || 1);
   const attestRepo = arg("attest") || process.env.OATH_ATTEST_REPO;
   if (attestRepo) { try { parseAttestSpec(attestRepo); } catch (e) { fail(2, e.message); } }
-  // --program: experimental account-based backend (program/oath_records) instead of scanning transaction
-  // history. Closes the revocation-eviction-by-spam gap in THREAT-MODEL.md, at the cost of needing
-  // @solana/web3.js and a deployed program. Opt-in only: every existing invocation is unaffected.
-  const programId = arg("program") || process.env.OATH_PROGRAM;
-  if (programId && maxAgeDays) fail(2, "--max-age does not work with --program yet (an on-chain record has no trustworthy age: the time in it is supplied by the signer). Drop one of them; a security flag that is silently ignored would be worse than an error.");
   // --approvals: offline signed approvals (lib/approval.mjs). No RPC, no chain: the signatures are checked locally.
   const approvalsPath = arg("approvals") || process.env.OATH_APPROVALS;
-  if (approvalsPath && programId) fail(2, "--approvals and --program are two different backends: use one.");
   if (approvalsPath && maxAgeDays) fail(2, "--max-age does not work with --approvals: every approval carries its own expiry date.");
   let check;
   if (approvalsPath) {
     let statements;
     try { statements = loadStatements(approvalsPath); } catch (e) { fail(2, `cannot read the approvals at ${approvalsPath}: ${e.message}`); }
     check = checkApprovals({ statements, signers, digest: want, image: flag("no-bind") ? undefined : repo, quorum });
-  } else if (programId) {
-    let pda;
-    try { pda = await import("../lib/pda.mjs"); } catch (e) { fail(2, `--program needs @solana/web3.js: ${e.message}`); }
-    try {
-      check = await pda.checkPda({ rpcUrl, programId, signers, digest: want, image: flag("no-bind") ? undefined : repo, quorum });
-    } catch (e) {
-      fail(2, `on-chain lookup failed: ${e.message}`);
-    }
   } else {
     try {
       check = await checkRecord({
@@ -185,10 +170,6 @@ async function verify() {
       console.log(`  approved by ${rec.signers.join(" + ")}${quorum > 1 ? `  (quorum ${rec.signers.length}/${quorum} met)` : ""}`);
       console.log(`  commit ${rec.commit} (${rec.image}), approved ${rec.approvedAt}, valid until ${rec.expiresAt}`);
       console.log("  checked offline: the signatures were verified here, nothing was asked of the network");
-    } else if (programId) {
-      console.log(`  on-chain record (program ${programId}), commit ${rec.commit}`);
-      console.log(`  by ${rec.signers.join(" + ")}${quorum > 1 ? `  (quorum ${rec.signers.length}/${quorum} met)` : ""}`);
-      console.log("  note: --program is an experimental backend (direct account lookup, no transaction-history scan); see README.");
     } else {
       console.log(`  built from commit ${rec.commit} (${rec.image})`);
       console.log(`  anchored at ${rec.anchoredAt} by ${rec.signers.join(" + ")}${quorum > 1 ? `  (quorum ${rec.signers.length}/${quorum} met)` : ""}`);
@@ -205,7 +186,7 @@ async function verify() {
     console.error("  Refusing to proceed: nobody you trust approved this image.");
     process.exit(1);
   }
-  console.error(`  No pipeline build with this digest${repo ? ` for ${repo}` : ""} was anchored${programId ? ` on-chain (program ${programId})` : ""} by ${quorum > 1 ? `${quorum} of ` : ""}${signers.join(" / ")}${maxAgeDays && !programId ? ` in the last ${maxAgeDays} days` : ""}.`);
+  console.error(`  No pipeline build with this digest${repo ? ` for ${repo}` : ""} was anchored by ${quorum > 1 ? `${quorum} of ` : ""}${signers.join(" / ")}${maxAgeDays && !programId ? ` in the last ${maxAgeDays} days` : ""}.`);
   console.error("  Refusing to proceed: the image may have been replaced outside the pipeline.");
   process.exit(1);
 }
@@ -287,33 +268,14 @@ async function anchor() {
   if (!commit) { try { commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { /* not a checkout */ } }
   commit = commit.trim().toLowerCase();
   if (!/^[0-9a-f]{7,40}$/.test(commit)) fail(2, "Missing --commit <sha> (or set GITHUB_SHA / BUILD_SOURCEVERSION / CI_COMMIT_SHA, or run inside a git checkout).");
-  const programId = arg("program") || process.env.OATH_PROGRAM;
   const text = `pod1|${repoName(image)}|${commit.slice(0, 12)}|${digest}|${new Date().toISOString()}`;
   if (flag("dry-run")) {
-    console.log(programId ? `Would record on-chain: program ${programId}, image ${repoName(image)}, commit ${commit.slice(0, 12)}, digest ${digest}` : `Would record: ${text}`);
+    console.log(`Would record: ${text}`);
     return;
   }
   const secretKey = readSecret();
   let rpcUrl;
   try { rpcUrl = resolveRpc({ rpc: arg("rpc"), network: arg("network") }); } catch (e) { fail(2, e.message); }
-
-  if (programId) {
-    let web3, pda;
-    try { web3 = await import("@solana/web3.js"); pda = await import("../lib/pda.mjs"); } catch (e) { fail(2, `--program needs @solana/web3.js: ${e.message}`); }
-    const payer = web3.Keypair.fromSecretKey(Uint8Array.from(secretKey));
-    const connection = new web3.Connection(rpcUrl, "confirmed");
-    try {
-      const out = await pda.sendRecord({ connection, programId, payer, digest, image, commit });
-      console.log(`Anchored on-chain (program ${programId})`);
-      console.log(`Account : ${out.address}`);
-      console.log(`Digest  : ${digest}`);
-      console.log(`Signer  : ${payer.publicKey.toBase58()}`);
-      console.log(`Tx      : ${out.signature}`);
-    } catch (e) {
-      fail(2, `could not send the on-chain record: ${e.message}`);
-    }
-    return;
-  }
 
   try {
     const out = await sendMemo({ text, secretKey, rpcUrl });
@@ -364,27 +326,9 @@ async function revoke() {
   const digest = extractDigest(arg("digest"));
   if (!digest) fail(2, "Missing --digest sha256:<64 hex>.");
   const reason = String(arg("reason") || "").replace(/[|\r\n]+/g, " ").trim().slice(0, 100);
-  const programId = arg("program") || process.env.OATH_PROGRAM;
   const secretKey = readSecret();
   let rpcUrl;
   try { rpcUrl = resolveRpc({ rpc: arg("rpc"), network: arg("network") }); } catch (e) { fail(2, e.message); }
-
-  if (programId) {
-    let web3, pda;
-    try { web3 = await import("@solana/web3.js"); pda = await import("../lib/pda.mjs"); } catch (e) { fail(2, `--program needs @solana/web3.js: ${e.message}`); }
-    const payer = web3.Keypair.fromSecretKey(Uint8Array.from(secretKey));
-    const connection = new web3.Connection(rpcUrl, "confirmed");
-    try {
-      const out = await pda.sendRevoke({ connection, programId, payer, digest, reason });
-      console.log(`Revoked on-chain (program ${programId})`);
-      console.log(`Account: ${out.address}`);
-      console.log(`Signer : ${payer.publicKey.toBase58()}`);
-      console.log(`Tx     : ${out.signature}`);
-    } catch (e) {
-      fail(2, `could not send the on-chain revocation: ${e.message}`);
-    }
-    return;
-  }
 
   const text = `pod1r|${digest}|${reason}|${new Date().toISOString()}`;
   try {
@@ -565,7 +509,6 @@ const HELP = {
       ["--commit <sha>", "default: GITHUB_SHA, BUILD_SOURCEVERSION, CI_COMMIT_SHA, or the current git commit"],
       ["--dry-run", "print the record that would be written and stop (no key needed)"],
       ["--key-file <file>", "the signing key; default: the SOLANA_SECRET_KEY environment variable"],
-      ["--program <id>", "experimental: record to the oath_records program (one account per signer+digest) instead of a Memo tx (or OATH_PROGRAM)"],
       ...NETWORK],
     ['Private registry: OATH_REGISTRY_AUTH=\'{"host":{"username":"u","password":"p"}}\'']),
   verify: help("oath verify: is this image one your pipeline built? Run it before deploy.",
@@ -579,7 +522,6 @@ const HELP = {
       ["--approvals <path>", "check signed approvals (a JSON file or a folder of them) offline instead of the chain; --signer lists the keys you trust"],
       ["--attest <spec>", "also require the Sigstore build attestation: owner/repo, or pin it with owner/repo/workflow.yml@refs/heads/main"],
       ["--no-bind", "do not require the record's image name to match the image"],
-      ["--program <id>", "experimental: check the oath_records program instead of scanning Memo transaction history (or OATH_PROGRAM); see README"],
       ...NETWORK],
     ["Exit code: 0 verified, 1 not verified (stop the deploy), 2 error"]),
   approve: help("oath approve: sign a statement about an image with a key (offline: no RPC, no chain). Verify it with `oath verify --approvals`.",
@@ -606,7 +548,6 @@ const HELP = {
       ["--digest sha256:…", "the digest to revoke"],
       ["--reason <text>", "shown by verify and audit (up to 100 characters)"],
       ["--key-file <file>", "a trusted signer's key; default: the SOLANA_SECRET_KEY environment variable"],
-      ["--program <id>", "experimental: revoke on the oath_records program instead of a Memo tx (or OATH_PROGRAM); not evictable by spamming the signer's address"],
       ...NETWORK]),
 };
 const MAIN_HELP = [

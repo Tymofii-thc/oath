@@ -52,11 +52,6 @@ jobs:
       - env:
           SOLANA_RPC: ${{ vars.SOLANA_RPC }}
         run: node test/live-devnet.mjs
-      - name: program/oath_records regression (revocation must survive, on the real devnet deployment)
-        env:
-          SOLANA_RPC: ${{ vars.SOLANA_RPC }}
-        run: node test/live-devnet-pda.mjs
-
       - name: The published webhook image is what install.sh would accept (recorded on Solana, attested by release-webhook on main)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -68,29 +63,3 @@ jobs:
             sleep 45
           done
           exit 1
-
-  e2e-pda:
-    # The experimental --program backend end to end, against a real local Solana validator running the
-    # actual compiled program (not devnet: no key or fees needed, and it exercises a fresh deploy each run).
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with: { node-version: 22 }
-      - run: npm ci --ignore-scripts
-      - name: Install the Solana CLI (cargo-build-sbf, solana-test-validator)
-        run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
-      - run: test/e2e-pda.sh
-      # The program as built from this commit, with its checksum. The upgrade authority of the deployed program is NOT a CI secret:
-      # whoever holds it deploys this file by hand (program/oath_records/DEPLOY.md), after comparing the checksum.
-      - name: Checksum of the built program
-        run: cd program/oath_records/target/deploy && sha256sum oath_records.so | tee oath_records.so.sha256
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: oath_records-${{ github.sha }}
-          path: |
-            program/oath_records/target/deploy/oath_records.so
-            program/oath_records/target/deploy/oath_records.so.sha256
-          retention-days: 90

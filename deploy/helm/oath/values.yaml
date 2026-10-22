@@ -8,7 +8,6 @@ mode: enforce              # enforce | audit
 failurePolicy: Fail        # Fail | Ignore
 quorum: 1
 attestRepo: ""             # empty = not required. owner/repo accepts any workflow and ref; pin it: owner/repo/deploy.yml@refs/heads/main
-program: ""                # experimental account-based backend instead of Memo scanning (README: "On-chain records"); empty = Memo (default)
 staleOkHours: 1            # RPC outage: admit digests verified in the last N hours (0 = strict)
 replicas: 2
 # Private registries, e.g. '{"ghcr.io":{"username":"u","password":"token"}}'. Or reference an existing Secret (key "auth").

@@ -145,12 +145,6 @@ test("anchor records the digest of the local copy (what this job pushed), not wh
   } finally { t.close(); }
 });
 
-test("verify --max-age together with --program is an error, not silently ignored", async () => {
-  const r = await cli(["verify", "--signer", SIGNER, "--digest", D, "--max-age", "7", "--program", "Prog11111111111111111111111111111111111111", "--rpc", "http://127.0.0.1:9"]);
-  assert.equal(r.code, 2, r.out + r.err);
-  assert.match(r.err, /--max-age does not work with --program/);
-});
-
 test("verify --attest with a malformed requirement exits 2 before any network call", async () => {
   const r = await cli(["verify", "--signer", SIGNER, "--digest", D, "--attest", "me/app@main", "--rpc", "http://127.0.0.1:9"]);
   assert.equal(r.code, 2, r.out + r.err);
@@ -202,12 +196,10 @@ test("oath approve + verify --approvals work offline and refuse everything else"
   assert.match(revoked.err, /REVOKED/); assert.match(revoked.err, /backdoor/);
 });
 
-test("--print-message needs no key, and --approvals refuses --max-age and --program", async () => {
+test("--print-message needs no key, and --approvals refuses --max-age", async () => {
   const p = await cli(["approve", "--image", "ghcr.io/me/app", "--digest", D, "--commit", "0123456789ab", "--print-message"]);
   assert.equal(p.code, 0, p.err);
   assert.match(p.out, /^oath approval v1\nimage: ghcr\.io\/me\/app\ndigest: sha256:a{64}\ncommit: 0123456789ab\napproved: /);
   const both = await cli(["verify", "--signer", SIGNER, "--digest", D, "--approvals", "/nonexistent", "--max-age", "7"]);
   assert.equal(both.code, 2); assert.match(both.err, /--max-age does not work with --approvals/);
-  const two = await cli(["verify", "--signer", SIGNER, "--digest", D, "--approvals", "/nonexistent", "--program", "P"]);
-  assert.equal(two.code, 2); assert.match(two.err, /two different backends/);
 });

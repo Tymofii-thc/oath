@@ -45,7 +45,6 @@ spec:
             - { name: OATH_QUORUM, value: "__OATH_QUORUM__" }      # distinct signers that must have anchored the digest (2 = CI key + approver key)
             - { name: OATH_ATTEST_REPO, value: "__OATH_ATTEST_REPO__" }  # owner/repo whose GitHub Actions must have signed a build attestation (empty = not required)
             - { name: OATH_APPROVALS_DIR, value: "__APPROVALS_DIR__" }  # signed approvals instead of the chain: /approvals (the ConfigMap oath-approvals) or empty (README: "Human-approved releases")
-            - { name: OATH_PROGRAM, value: "__OATH_PROGRAM__" }         # experimental account-based backend (README: "On-chain records"); empty = Memo (default)
           ports: [{ containerPort: 8443 }]
           readinessProbe:
             httpGet: { path: /readyz, port: 8443, scheme: HTTPS }

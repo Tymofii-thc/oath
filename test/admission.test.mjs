@@ -179,41 +179,6 @@ test("a slow lookup is answered with a clear denial before the API server's time
   assert.ok(audit.response.warnings[0].includes("took longer"));
 });
 
-// --- OATH_PROGRAM / --program: the experimental account-based backend (lib/pda.mjs), stubbed via deps.findPda
-// so this stays an offline unit test; test/pda-local-validator.mjs and test/e2e-pda.sh exercise the real thing.
-test("programId routes lookups through deps.findPda instead of the Memo backend", async () => {
-  let calls = 0;
-  const findPda = async ({ digest, programId }) => { calls++; assert.equal(programId, "Prog1111"); return digest === D1 ? { signature: "onchain" } : null; };
-  const h = makeHandler({ signers: ["S"], rpcUrl: "x", programId: "Prog1111", deps: { resolveDigest: deps.resolveDigest, findPda } });
-  const ok = await h(pod(["ghcr.io/me/app:v1"]));
-  assert.equal(ok.response.allowed, true);
-  assert.equal(calls, 1);
-  const bad = await h(pod(["ghcr.io/me/evil:latest"]));
-  assert.equal(bad.response.allowed, false);
-});
-
-test("without programId, the Memo backend is used even if deps.findPda is given (it should never be called)", async () => {
-  const findPda = async () => { throw new Error("must not be called"); };
-  const h = makeHandler({ signers: ["S"], rpcUrl: "x", deps: { resolveDigest: deps.resolveDigest, findRecord: deps.findRecord, findPda } });
-  const r = await h(pod(["ghcr.io/me/app:v1"]));
-  assert.equal(r.response.allowed, true);
-});
-
-test("OATH_MAX_AGE_DAYS together with OATH_PROGRAM refuses to start instead of being silently ignored", () => {
-  assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "http://x", maxAgeSeconds: 86400, programId: "Prog11111111111111111111111111111111111111" }), /OATH_MAX_AGE_DAYS does not work with OATH_PROGRAM/);
-  assert.doesNotThrow(() => makeHandler({ signers: ["S"], rpcUrl: "http://x", programId: "Prog11111111111111111111111111111111111111" }));
-});
-
-// The verdict and the pinning are two webhooks: the ValidatingWebhook decides on the final Pod, the MutatingWebhook only pins.
-test("verdict phase: denies an un-anchored image and never patches", async () => {
-  const h = mk();
-  const bad = await h(pod(["ghcr.io/me/evil:latest"]), "verdict");
-  assert.equal(bad.response.allowed, false);
-  const ok = await h(pod(["ghcr.io/me/app:v1"]), "verdict");
-  assert.equal(ok.response.allowed, true);
-  assert.equal(ok.response.patch, undefined, "a validating webhook cannot and must not mutate");
-});
-
 test("verdict phase checks the image as another mutating webhook left it, not as it was submitted", async () => {
   // the Pod the verdict phase sees already carries the digest that a sidecar injector or a pin put there
   const swapped = pod([`ghcr.io/me/evil@${D2}`]);
@@ -318,8 +283,7 @@ test("approvals mode: expired approvals and revocations are honoured, and new fi
   assert.match(expired.response.status.message, /expired/);
 });
 
-test("approvals mode cannot be combined with the chain backend or --max-age", () => {
-  assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "x", approvalsDir: "/tmp", programId: "P", deps }), /two different backends/);
+test("approvals mode cannot be combined with --max-age", () => {
   assert.throws(() => makeHandler({ signers: ["S"], rpcUrl: "x", approvalsDir: "/tmp", maxAgeSeconds: 5, deps }), /expiry/);
 });
 

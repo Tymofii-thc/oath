@@ -22,7 +22,7 @@
   <h2>CI, right now</h2>
   <p class="note">GitHub's own badges — live, not cached by this page.</p>
   <table class="badges">
-    <tr><td>unit + e2e-kind + e2e-pda + live-devnet</td><td><img alt="ci" src="https://github.com/Tymofii-thc/oath/actions/workflows/ci.yml/badge.svg?branch=main"></td></tr>
+    <tr><td>unit + e2e-kind + live-devnet</td><td><img alt="ci" src="https://github.com/Tymofii-thc/oath/actions/workflows/ci.yml/badge.svg?branch=main"></td></tr>
     <tr><td>codeql</td><td><img alt="codeql" src="https://github.com/Tymofii-thc/oath/actions/workflows/codeql.yml/badge.svg?branch=main"></td></tr>
     <tr><td>build-anchor-verify-deploy (dogfood)</td><td><img alt="deploy" src="https://github.com/Tymofii-thc/oath/actions/workflows/deploy.yml/badge.svg?branch=main"></td></tr>
     <tr><td>release-webhook (image build)</td><td><img alt="release-webhook" src="https://github.com/Tymofii-thc/oath/actions/workflows/release-webhook.yml/badge.svg?branch=main"></td></tr>
@@ -61,7 +61,6 @@
     <li><strong>There is no database and no server-side durable state.</strong> The only state that matters lives on Solana (public, immutable) and in key files on whoever's machine generated them. Nothing here is backed up by this project — that's the operator's job.</li>
     <li><strong>CI signing key</strong> (<code>.oath/ci-key.json</code> or wherever <code>oath init</code> put it): if it's lost, past records anchored by it still verify (they don't depend on the key file surviving), but nothing new can be anchored under that signer until you rotate to a new one and update <code>OATH_SIGNER</code> everywhere. Losing it is not catastrophic; losing it to an attacker is (see THREAT-MODEL.md).</li>
     <li><strong>Approver key</strong> (quorum ≥2 setups): same as above, kept off CI by design. If it's lost with no copy, quorum can never be met again for new builds until a replacement approver key is added everywhere <code>--quorum</code>/<code>OATH_SIGNER</code> is configured.</li>
-    <li><strong><code>--program</code> (on-chain records, experimental):</strong> the current devnet deployment (<code>EWse8WXE…</code>) has a single upgrade authority, a key file on the maintainer's machine with no recovery phrase (not the CI key, not in GitHub). Losing it means that program can no longer be upgraded; existing on-chain records stay readable. The first deployment is deprecated (flawed, authority unknown).</li>
     <li><strong>Webhook TLS certificate:</strong> 825-day lifetime, generated fresh by <code>install.sh</code>/Helm, not auto-rotated. Re-run <code>install.sh</code> (or <code>helm upgrade</code>) before it expires, or every new Pod in the cluster gets refused (<code>failurePolicy: Fail</code>).</li>
     <li><strong>Devnet has no retention guarantee.</strong> Anything anchored there could in principle be pruned by a network reset; this has not happened to this project's own fixtures so far, but it is not a promise. Mainnet is the durable option and is supported, but not yet exercised in CI (README: Mainnet).</li>
   </ul>

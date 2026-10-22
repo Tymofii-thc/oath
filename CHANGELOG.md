@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (0.6.0)
+
+**Removed: `--program` / `OATH_PROGRAM` and the on-chain program `program/oath_records`.** It was an experiment to keep a revocation from being pushed out of the scanned history by spam. Human approvals are checked offline and have no such window, the program needed an upgrade key (a single point of trust that could void `--quorum`), had no audit, and was found blockable once already. Removing it also removes `lib/pda.mjs`, its tests and CI jobs, and `@solana/web3.js` from the webhook image (the image has 0 findings in Trivy at every severity). The two devnet deployments stay on the chain, unused: `6n6fJ6WQ…` (authority unknown) and `EWse8WXE…` (authority a key file on the maintainer's machine). `--program` was in 0.4.0 and 0.5.0 on npm; nobody is known to have used it.
+
 ## 0.5.0
 
 **Human-approved releases (new, the recommended mode).** A person approves an image digest by signing a short plain-text statement with an Ed25519 key (a Solana wallet key works: Phantom and Solflare sign messages); the place where images run checks it **offline**, with no RPC, no chain and no network. The trusted keys are only the approvers', so a taken-over pipeline, the CI key or the registry password do not matter to the cluster.
