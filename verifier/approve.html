@@ -49,7 +49,7 @@
       </div>
       <div class="field">
         <label for="a-mode" data-i18n="ap_mode">Action</label>
-        <select id="a-mode"><option value="approve" data-i18n="ap_mode_approve">Approve a build</option><option value="revoke" data-i18n="ap_mode_revoke">Revoke a digest</option></select>
+        <select id="a-mode"><option value="approve" data-i18n="ap_mode_approve">Approve a build</option><option value="revoke" data-i18n="ap_mode_revoke">Revoke a digest</option><option value="msg-approve" data-i18n="ap_mode_msg_approve">Approve a release (signed message)</option><option value="msg-revoke" data-i18n="ap_mode_msg_revoke">Revoke (signed message)</option></select>
       </div>
       <div class="field">
         <label for="a-net" data-i18n="ap_net">Network</label>
@@ -67,6 +67,10 @@
         <label for="a-digest" data-i18n="ap_digest">Image digest</label>
         <input id="a-digest" class="mono" type="text" spellcheck="false" placeholder="sha256:…" autocomplete="off">
       </div>
+      <div class="field" id="f-days" hidden>
+        <label for="a-days" data-i18n="ap_days">Valid for (days)</label>
+        <input id="a-days" type="number" min="1" max="366" value="30" inputmode="numeric">
+      </div>
       <div class="field" id="f-reason" hidden>
         <label for="a-reason" data-i18n="ap_reason">Reason</label>
         <input id="a-reason" type="text" maxlength="100" autocomplete="off" data-i18n-attr="placeholder:ap_reason_ph" placeholder="why this digest is bad">
@@ -80,6 +84,16 @@
     <div class="term" id="a-term" role="status" aria-live="polite">
       <div class="term-bar"><span data-i18n="ap_result">result</span></div>
       <div class="term-body" id="out"><span class="dim" data-i18n="ap_idle">Connect a wallet, check the memo, then sign.</span></div>
+    </div>
+
+    <div class="panel" id="a-result" hidden>
+      <p class="label-s" id="res-l" data-i18n="ap_json_l">Signed statement (a file; nothing was sent anywhere)</p>
+      <textarea id="a-json" class="code-block mono" rows="9" readonly spellcheck="false" aria-labelledby="res-l"></textarea>
+      <div class="wallet-row">
+        <button type="button" class="btn" id="a-dl" data-i18n="ap_dl">Download</button>
+        <button type="button" class="btn" id="a-cp" data-i18n="ap_cp">Copy</button>
+      </div>
+      <pre class="code-block mono" id="a-how"></pre>
     </div>
   </div>
 </main>

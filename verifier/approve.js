@@ -29,6 +29,16 @@
       ap_mode: 'Action',
       ap_mode_approve: 'Approve a build',
       ap_mode_revoke: 'Revoke a digest',
+      ap_mode_msg_approve: 'Approve a release (signed message)',
+      ap_mode_msg_revoke: 'Revoke (signed message)',
+      ap_days: 'Valid for (days)',
+      ap_msg_l: 'Message to sign (the wallet shows this text)',
+      ap_json_l: 'Signed statement (a file; nothing was sent anywhere)',
+      ap_dl: 'Download',
+      ap_cp: 'Copy',
+      ap_signed: 'Signed by {w}. No transaction was sent and no network was used.',
+      ap_when: '(time of signing)',
+      ap_e_days: 'Valid for 1 to 366 days.',
       ap_net: 'Network',
       ap_image: 'Image name',
       ap_commit: 'Commit',
@@ -70,6 +80,16 @@
       ap_mode: 'Дія',
       ap_mode_approve: 'Затвердити збірку',
       ap_mode_revoke: 'Відкликати digest',
+      ap_mode_msg_approve: 'Схвалити реліз (підписане повідомлення)',
+      ap_mode_msg_revoke: 'Відкликати (підписане повідомлення)',
+      ap_days: 'Діє (днів)',
+      ap_msg_l: 'Повідомлення для підпису (гаманець покаже цей текст)',
+      ap_json_l: 'Підписана заява (файл; нічого нікуди не надіслано)',
+      ap_dl: 'Завантажити',
+      ap_cp: 'Копіювати',
+      ap_signed: 'Підписано {w}. Транзакцію не надсилано, мережа не використовувалась.',
+      ap_when: '(час підпису)',
+      ap_e_days: 'Діє від 1 до 366 днів.',
       ap_net: 'Мережа',
       ap_image: 'Імʼя образу',
       ap_commit: 'Коміт',
@@ -108,9 +128,47 @@
   const bufferFrom = (bytes) => wallet.toBuffer().constructor.from(bytes);
   const clean = (s) => String(s || '').replace(/[|\r\n]+/g, ' ').trim();
 
+  /* ---- signed messages (offline approvals): the same text and the same rules as lib/approval.mjs ---- */
+  const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  function b58encode(bytes) {
+    let n = 0n;
+    for (const b of bytes) n = n * 256n + BigInt(b);
+    let out = '';
+    while (n > 0n) { out = B58[Number(n % 58n)] + out; n /= 58n; }
+    for (const b of bytes) { if (b === 0) out = '1' + out; else break; }
+    return out;
+  }
+  // same normalisation as repoName() in lib/oath.mjs: lowercase, no tag, no digest, docker.io for bare names
+  function normImage(ref) {
+    let r = String(ref).trim().replace(/@sha256:[0-9a-f]{64}$/i, '');
+    const slash = r.lastIndexOf('/'), colon = r.lastIndexOf(':');
+    if (colon > slash) r = r.slice(0, colon);
+    const parts = r.split('/');
+    if (parts.length === 1) r = 'docker.io/library/' + r;
+    else if (!/[.:]/.test(parts[0]) && parts[0] !== 'localhost') r = 'docker.io/' + r;
+    return r.toLowerCase();
+  }
+  const isMsgMode = () => $('a-mode').value.startsWith('msg-');
+  function buildMessage(now) {
+    const mode = $('a-mode').value;
+    const digest = $('a-digest').value.trim().toLowerCase();
+    if (!DIGEST_RE.test(digest)) return { error: t('ap_e_digest') };
+    const iso = now.toISOString();
+    if (mode === 'msg-revoke') return { text: ['oath revocation v1', 'digest: ' + digest, 'reason: ' + clean($('a-reason').value).slice(0, 100), 'issued: ' + iso].join('\n') };
+    const image = $('a-image').value.trim();
+    const commit = $('a-commit').value.trim().toLowerCase();
+    const days = Number($('a-days').value);
+    if (!image) return { error: t('ap_e_image') };
+    if (!/^[0-9a-f]{7,40}$/.test(commit)) return { error: t('ap_e_commit') };
+    if (!(days >= 1 && days <= 366)) return { error: t('ap_e_days') };
+    const expires = new Date(now.getTime() + days * 86400000).toISOString();
+    return { text: ['oath approval v1', 'image: ' + normImage(image), 'digest: ' + digest, 'commit: ' + commit.slice(0, 12), 'approved: ' + iso, 'expires: ' + expires].join('\n') };
+  }
+
   // Returns { text, error }. `text` is the memo to sign (time is filled in when signing).
   function build(now) {
     const mode = $('a-mode').value;
+    if (isMsgMode()) return buildMessage(now || new Date());
     const digest = $('a-digest').value.trim().toLowerCase();
     if (!DIGEST_RE.test(digest)) return { error: t('ap_e_digest') };
     const iso = (now || new Date()).toISOString();
@@ -123,11 +181,16 @@
   }
 
   function refresh() {
-    const isRevoke = $('a-mode').value === 'revoke';
+    const mode = $('a-mode').value;
+    const isRevoke = mode === 'revoke' || mode === 'msg-revoke';
     $('f-image').hidden = isRevoke; $('f-commit').hidden = isRevoke; $('f-reason').hidden = !isRevoke;
+    $('f-days').hidden = mode !== 'msg-approve';
+    $('a-net').closest('.field').hidden = isMsgMode();
+    $('prev-l').textContent = isMsgMode() ? t('ap_msg_l') : t('ap_preview_l');
     const b = build(new Date(0));
     const pre = $('a-preview');
     if (b.error) { pre.textContent = t('ap_fill'); $('a-err').hidden = true; }
+    else if (isMsgMode()) { pre.textContent = b.text.replace(/(approved|issued): 1970-01-01T00:00:00\.000Z/, '$1: ' + t('ap_when')).replace(/expires: [0-9T:.Z-]+/, 'expires: ' + (mode === 'msg-approve' ? '+' + $('a-days').value + ' d' : '')); $('a-err').hidden = true; }
     else { pre.textContent = b.text.replace(/\|1970-01-01T00:00:00\.000Z$/, '|' + t('ap_time')); $('a-err').hidden = true; }
     $('a-sign').disabled = !wallet || !!b.error;
   }
@@ -192,11 +255,48 @@
     }
   }
 
+  /* wallet.signMessage: an ed25519 signature over the text, no transaction, no network. Phantom and Solflare both offer it; the
+     result is { signature } in some wallets and the bytes themselves in others. */
+  async function signText(b) {
+    $('a-sign').disabled = true;
+    show('', [['ap_waiting']]);
+    try {
+      const res = await provider.signMessage(new TextEncoder().encode(b.text), 'utf8');
+      const sig = res && res.signature ? res.signature : res;
+      const stmt = { v: 1, message: b.text, signer: wallet.toBase58(), signature: b58encode(new Uint8Array(sig)) };
+      const json = JSON.stringify(stmt, null, 2) + '\n';
+      show('ok', [['ap_signed', { w: wallet.toBase58() }]]);
+      $('a-json').value = json;
+      const revoke = $('a-mode').value === 'msg-revoke';
+      const digest = $('a-digest').value.trim().toLowerCase();
+      const file = (revoke ? 'oath-revocation-' : 'oath-approval-') + digest.slice(7, 19) + '.json';
+      $('a-result').hidden = false;
+      $('a-dl').onclick = () => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+        a.download = file; document.body.appendChild(a); a.click(); a.remove();
+      };
+      $('a-cp').onclick = async () => { try { await navigator.clipboard.writeText(json); } catch { $('a-json').select(); } };
+      $('a-how').textContent = [
+        '# check it (offline)',
+        'oath verify --signer ' + wallet.toBase58() + ' --image <name>@' + digest + ' --approvals ' + file,
+        '',
+        '# Kubernetes: keep all approval files in one folder, then',
+        'kubectl -n oath-system create configmap oath-approvals --from-file=<folder> --dry-run=client -o yaml | kubectl apply -f -',
+      ].join('\n');
+    } catch (e) {
+      show('bad', [['ap_fail', { msg: e && e.message ? e.message : e }]]);
+    } finally {
+      refresh();
+    }
+  }
+
   async function sign(ev) {
     ev.preventDefault();
     const b = build(new Date());
     if (b.error) { $('a-err').textContent = b.error; $('a-err').hidden = false; return; }
     if (!wallet || !provider) return;
+    if (isMsgMode()) return signText(b);
     const net = NETS[$('a-net').value] || NETS.devnet;
     const { Connection, Transaction, TransactionInstruction, PublicKey } = solanaWeb3;
     $('a-sign').disabled = true;
@@ -257,8 +357,8 @@
     const set = (id, v) => { if (v) $(id).value = v; };
     set('a-image', q.get('image')); set('a-commit', q.get('commit')); set('a-digest', q.get('digest')); set('a-reason', q.get('reason'));
     if (q.get('net') && NETS[q.get('net')]) $('a-net').value = q.get('net');
-    if (q.get('mode') === 'revoke') $('a-mode').value = 'revoke';
-    for (const id of ['a-mode', 'a-image', 'a-commit', 'a-digest', 'a-reason', 'a-net']) $(id).addEventListener('input', refresh);
+    if (['revoke', 'msg-approve', 'msg-revoke'].includes(q.get('mode'))) $('a-mode').value = q.get('mode');
+    for (const id of ['a-mode', 'a-image', 'a-commit', 'a-digest', 'a-reason', 'a-net', 'a-days']) $(id).addEventListener('input', refresh);
     $('a-connect').addEventListener('click', connect);
     window.addEventListener('load', fillPicker); // wallets inject their provider late
     $('a-pick').addEventListener('change', () => { wallet = null; provider = null; const w = $('a-wallet'); w.setAttribute('data-i18n', 'ap_not_connected'); w.textContent = t('ap_not_connected'); refresh(); });

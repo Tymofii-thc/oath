@@ -73,7 +73,18 @@ case "$OK_IMAGE" in
     HUMAN="$(cat "$adir/human.pub")"
     OATH_SIGNER=$HUMAN OATH_IMAGE=oath:e2e OATH_APPROVALS=yes "$root/deploy/install.sh" >/dev/null 2>&1
     kubectl -n oath-system rollout status deploy/oath-webhook --timeout=90s >/dev/null 2>&1
-    waitfile() { for _ in $(seq 1 40); do kubectl -n oath-system exec deploy/oath-webhook -- ls /approvals 2>/dev/null | grep -q "$1" && return 0; sleep 3; done; return 1; }
+    # a ConfigMap reaches the replicas one by one (kubelet sync): wait until EVERY replica has the file, or a request may land on one that does not
+    waitfile() {
+      for _ in $(seq 1 60); do
+        missing=0
+        for pod in $(kubectl -n oath-system get pods -l app=oath-webhook -o name 2>/dev/null); do
+          kubectl -n oath-system exec "$pod" -- ls /approvals 2>/dev/null | grep -q "$1" || missing=1
+        done
+        [ "$missing" = 0 ] && return 0
+        sleep 3
+      done
+      return 1
+    }
     kubectl run appr-none --image="$OK_IMAGE" --restart=Never >/dev/null 2>&1; check "approvals: nothing approved yet -> denied" 1 $?
     SOLANA_SECRET_KEY="$(cat "$adir/human.json")" node "$root/bin/oath.mjs" approve --image "${OK_IMAGE%@*}" --digest "${OK_IMAGE#*@}" --commit 0123456789ab --out "$adir/files/approval.json" >/dev/null 2>&1
     kubectl -n oath-system create configmap oath-approvals --from-file="$adir/files" --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
