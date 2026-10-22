@@ -34,6 +34,7 @@ run  (Kubernetes webhook, or a guard before docker run) ──► checks the sig
 **Install:** `npm install -g oath-verify` gives you the `oath` command. Or skip the install and put `npx --yes oath-verify` in front of any command below (handy in CI: pin it as `npx --yes oath-verify@0.5.0`). In a clone, `node bin/oath.mjs` is the same thing. `oath` below means any of these.
 
 ## Human-approved releases: quick start
+*(needs `oath-verify` 0.5.0 or newer; if `oath approve` is not found, your copy is older: update it, or run `node bin/oath.mjs approve …` from a clone.)*
 ```bash
 # 1. once: the approver's key (offline, no SOL, no network). Keep it OFF CI.
 oath init --approver --offline                     # prints the public key and the next steps
